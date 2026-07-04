@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FLOW AI · 多因子趋势分析</title>
+<title>FLOW AI · 多因子策略引擎</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#2d3436;line-height:1.6}
@@ -21,7 +21,7 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 
 /* 卡片 */
 .cards{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
-.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.06);min-width:140px;flex:1}
+.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.06);min-width:130px;flex:1}
 .card .label{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px}
 .card .value{font-size:20px;font-weight:700;margin-top:2px}
 .card .sub{font-size:11px;color:#888;margin-top:2px}
@@ -35,17 +35,25 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .score-bar-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
 
 /* 内容区布局 */
-.content{display:grid;grid-template-columns:1fr 380px;gap:16px}
-@media(max-width:1100px){.content{grid-template-columns:1fr}}
+.content{display:grid;grid-template-columns:1fr 400px;gap:16px}
+@media(max-width:1200px){.content{grid-template-columns:1fr}}
 .chart-section{flex:1}
 .sidebar{display:flex;flex-direction:column;gap:12px}
 
 /* 面板 */
 .panel{background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
 .panel h3{font-size:13px;font-weight:600;margin-bottom:8px;color:#1a1a2e;border-bottom:2px solid #0984e3;padding-bottom:5px;display:flex;align-items:center;justify-content:space-between}
-.panel h3 .badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#e0e0e0;color:#666}
 
-/* 斜率行 */
+/* Tab */
+.tabs{display:flex;gap:0;margin-bottom:0}
+.tabs button{padding:5px 10px;font-size:11px;border:1px solid #ddd;border-right:none;background:#f8f9fa;cursor:pointer;color:#666}
+.tabs button:first-child{border-radius:6px 0 0 6px}
+.tabs button:last-child{border-right:1px solid #ddd;border-radius:0 6px 6px 0}
+.tabs button.active{background:#0984e3;color:#fff;border-color:#0984e3}
+.tab-content{display:none;margin-top:8px}
+.tab-content.active{display:block}
+
+/* 斜率 */
 .slope-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f8f8f8;font-size:13px}
 .slope-row .name{font-weight:600;min-width:45px}
 .slope-row .dir{font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600}
@@ -53,7 +61,7 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .dir.down{background:#e8f5e9;color:#19a15f}
 .dir.flat{background:#dfe6e9;color:#636e72}
 
-/* 信号项 */
+/* 信号 */
 .signal-item{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f8f8f8;font-size:12px}
 .sig-badge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:600;white-space:nowrap}
 .sig-badge.bullish{background:#ffeaea;color:#ec2c2c}
@@ -65,11 +73,38 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .chart-box{background:#fff;border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-top:16px}
 .chart-box img{width:100%;border-radius:4px}
 
+/* 策略表格 */
+.strat-table{max-height:340px;overflow-y:auto;font-size:12px}
+.strat-table table{width:100%;border-collapse:collapse}
+.strat-table th{position:sticky;top:0;background:#f0f2f5;padding:5px 6px;text-align:left;font-size:10px;color:#999;white-space:nowrap}
+.strat-table td{padding:3px 6px;border-bottom:1px solid #f5f5f5;font-size:11px}
+.strat-table tr:hover{background:#f0f8ff}
+.strat-table .green{color:#19a15f}
+.strat-table .red{color:#ec2c2c}
+.strat-rank{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%;font-size:10px;font-weight:700;color:#fff;background:#0984e3;margin-right:4px}
+.strat-rank.gold{background:#f39c12}
+.strat-rank.silver{background:#95a5a6}
+.strat-rank.bronze{background:#e67e22}
+
+/* 共识卡片 */
+.consensus-banner{padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;margin-bottom:8px}
+.consensus-banner.strong-bull{background:#ffeaea;color:#ec2c2c;border:1px solid #ec2c2c}
+.consensus-banner.bull{background:#fff5f5;color:#e74c3c;border:1px solid #e74c3c}
+.consensus-banner.strong-bear{background:#e8f5e9;color:#19a15f;border:1px solid #19a15f}
+.consensus-banner.bear{background:#f0faf0;color:#27ae60;border:1px solid #27ae60}
+.consensus-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;margin:6px 0}
+.consensus-bar-inner{height:100%;border-radius:4px;transition:width 0.5s}
+
+/* 策略信号行 */
+.strat-signal{padding:5px 8px;margin:3px 0;border-radius:4px;font-size:11px;display:flex;align-items:center;justify-content:space-between}
+.strat-signal.buy{background:#ffeaea}
+.strat-signal.sell{background:#e8f5e9}
+.strat-signal strong-buy{background:#ffcccc}
+.strat-signal strong-sell{background:#c8e6c9}
+
 /* 形态搜索 */
 .search-result{background:#f8f9fa;border-radius:6px;padding:8px;margin-top:6px;font-size:12px}
 .search-result .item{padding:3px 0;border-bottom:1px solid #eee}
-.search-result .corr{font-weight:600;color:#0984e3}
-.search-result .pattern-type{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#e0e0e0;color:#555;margin-left:4px}
 
 /* 因子表 */
 .factor-table{max-height:300px;overflow-y:auto;font-size:12px}
@@ -77,15 +112,6 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .factor-table th{position:sticky;top:0;background:#f0f2f5;padding:4px 8px;text-align:left;font-size:11px;color:#999}
 .factor-table td{padding:3px 8px;border-bottom:1px solid #f5f5f5}
 .factor-cat{color:#999;font-size:10px}
-
-/* Tab */
-.tabs{display:flex;gap:0;margin-bottom:0}
-.tabs button{padding:6px 14px;font-size:12px;border:1px solid #ddd;border-right:none;background:#f8f9fa;cursor:pointer;color:#666}
-.tabs button:first-child{border-radius:6px 0 0 6px}
-.tabs button:last-child{border-right:1px solid #ddd;border-radius:0 6px 6px 0}
-.tabs button.active{background:#0984e3;color:#fff;border-color:#0984e3}
-.tab-content{display:none}
-.tab-content.active{display:block}
 
 .loader{display:none;text-align:center;padding:40px;color:#888}
 .loader.active{display:block}
@@ -97,14 +123,13 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 <body>
 
 <header>
-  <h1>FLOW AI · 多因子趋势分析</h1>
+  <h1>FLOW AI · 多因子策略引擎</h1>
   <div class="toolbar">
     <input id="tickerInput" placeholder="股票代码" value="NVDA" />
     <select id="periodSelect">
-      <option value="1y">1年</option>
-      <option value="6mo" selected>6个月</option>
+      <option value="1y" selected>1年</option>
+      <option value="6mo">6个月</option>
       <option value="3mo">3个月</option>
-      <option value="1mo">1个月</option>
     </select>
     <button onclick="analyze()">分析</button>
     <span style="color:#888">|</span>
@@ -116,7 +141,7 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 
 <div class="loader active" id="loader">
   <div class="spinner"></div>
-  <p style="margin-top:10px;font-size:14px">计算因子、趋势线、信号中...</p>
+  <p style="margin-top:10px;font-size:14px">计算因子、策略信号、回测中...</p>
 </div>
 
 <main id="mainContent" class="hidden">
@@ -126,52 +151,71 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
   <div class="content">
     <!-- 左侧: 图表 -->
     <div class="chart-section">
+      <!-- 策略共识横幅 -->
+      <div id="consensusBanner" style="margin-bottom:12px"></div>
       <div class="chart-box">
-        <img id="chartImg" src="" alt="图表" />
+        <div class="tabs" style="margin-bottom:8px">
+          <button class="active" onclick="switchChartTab('factor')">因子图表</button>
+          <button onclick="switchChartTab('strategy')">策略信号图</button>
+        </div>
+        <div class="tab-content active" id="tab-chart-factor">
+          <img id="chartImg" src="" alt="图表" style="width:100%;border-radius:4px" />
+        </div>
+        <div class="tab-content" id="tab-chart-strategy" style="text-align:center;padding:20px;color:#888">
+          点击生成策略信号图
+          <br><button onclick="genStrategyChart()" style="margin-top:10px;padding:8px 20px;font-size:13px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer">生成</button>
+        </div>
       </div>
     </div>
 
     <!-- 右侧: 侧边栏 -->
     <div class="sidebar">
-      <!-- Tab 切换 -->
+      <!-- Tab -->
       <div class="panel">
         <div class="tabs">
-          <button class="active" onclick="switchTab('signals')">信号</button>
+          <button class="active" onclick="switchTab('strategy')">策略</button>
+          <button onclick="switchTab('signals')">信号</button>
           <button onclick="switchTab('slopes')">斜率</button>
-          <button onclick="switchTab('pattern')">形态搜索</button>
+          <button onclick="switchTab('pattern')">形态</button>
           <button onclick="switchTab('factors')">因子</button>
         </div>
 
+        <!-- 策略 Tab -->
+        <div class="tab-content active" id="tab-strategy">
+          <div id="strategyContent" style="margin-top:4px">
+            <div style="color:#aaa;font-size:12px;text-align:center;padding:20px">加载策略回测...</div>
+          </div>
+        </div>
+
         <!-- 信号 Tab -->
-        <div class="tab-content active" id="tab-signals">
-          <div id="signalContent" style="max-height:400px;overflow-y:auto;margin-top:8px">
+        <div class="tab-content" id="tab-signals">
+          <div id="signalContent" style="max-height:400px;overflow-y:auto">
             <div style="color:#aaa;font-size:12px">加载中...</div>
           </div>
         </div>
 
         <!-- 斜率 Tab -->
         <div class="tab-content" id="tab-slopes">
-          <div id="slopeContent" style="margin-top:8px"></div>
+          <div id="slopeContent"></div>
           <div id="srContent" style="margin-top:12px;padding-top:8px;border-top:1px solid #eee"></div>
         </div>
 
         <!-- 形态搜索 Tab -->
         <div class="tab-content" id="tab-pattern">
-          <div style="margin-top:8px">
-            <div style="font-size:12px;color:#666;margin-bottom:8px">搜索与当前走势相似的区间</div>
+          <div>
             <select id="searchType" style="padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;width:100%">
               <option value="historical">该股票历史相似</option>
               <option value="cross_stock">其他股票相似走势</option>
             </select>
             <button onclick="patternSearch()" style="padding:5px 12px;font-size:12px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer;width:100%">搜索</button>
             <div id="patternFeatures" style="margin-top:8px;font-size:11px;color:#666"></div>
-            <div id="patternResults" style="margin-top:8px;max-height:300px;overflow-y:auto"></div>
+            <div id="patternResults" style="margin-top:8px;max-height:250px;overflow-y:auto"></div>
           </div>
         </div>
 
         <!-- 因子 Tab -->
         <div class="tab-content" id="tab-factors">
-          <div class="factor-table" id="factorContent" style="margin-top:8px">
+          <div class="factor-table" id="factorContent">
             <div style="color:#aaa;font-size:12px">加载中...</div>
           </div>
         </div>
@@ -179,7 +223,7 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 
       <!-- 交叉记录 -->
       <div class="panel" id="crossPanel">
-        <h3>近期交叉 <span class="badge">MA5×MA20</span></h3>
+        <h3>近期交叉</h3>
         <div id="crossContent"></div>
       </div>
     </div>
@@ -189,21 +233,25 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 <script>
 let currentMode = "multi";
 let currentTicker = "";
+let strategyData = null;
 
 function setMode(mode) {
   currentMode = mode;
-  document.querySelectorAll(".mode-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.mode === mode);
-  });
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   if (currentTicker) analyze();
 }
 
 function switchTab(tab) {
-  document.querySelectorAll(".tabs button").forEach((b, i) => {
-    b.classList.toggle("active", ["signals","slopes","pattern","factors"][i] === tab);
-  });
-  document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+  const tabs = ["strategy","signals","slopes","pattern","factors"];
+  document.querySelectorAll(".sidebar .tabs button").forEach((b, i) => b.classList.toggle("active", tabs[i] === tab));
+  document.querySelectorAll(".sidebar .tab-content").forEach(el => el.classList.remove("active"));
   document.getElementById("tab-" + tab).classList.add("active");
+}
+
+function switchChartTab(tab) {
+  document.querySelectorAll(".chart-box .tabs button").forEach((b, i) => b.classList.toggle("active", ["factor","strategy"][i] === tab));
+  document.querySelectorAll(".chart-box .tab-content").forEach(el => el.classList.remove("active"));
+  document.getElementById("tab-chart-" + tab).classList.add("active");
 }
 
 async function analyze() {
@@ -217,12 +265,15 @@ async function analyze() {
 
   try {
     const period = document.getElementById("periodSelect").value;
-    const res = await fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    render(data);
+    const [analyzeRes, backtestRes, consensusRes] = await Promise.all([
+      fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`).then(r => r.json()),
+      fetch(`/api/backtest/${ticker}?period=${period}`).then(r => r.json()),
+      fetch(`/api/consensus/${ticker}?period=${period}`).then(r => r.json()),
+    ]);
+    strategyData = backtestRes;
+    render(analyzeRes, backtestRes, consensusRes);
     document.getElementById("statusBar").textContent =
-      `完成 | ${data.data_start}~${data.data_end} | ${data.records}条 | ${data.factor_count}因子`;
+      `完成 | ${analyzeRes.data_start}~${analyzeRes.data_end} | ${analyzeRes.records}条 | ${analyzeRes.factor_count}因子`;
   } catch (e) {
     document.getElementById("statusBar").textContent = "出错: " + e.message;
   } finally {
@@ -231,7 +282,7 @@ async function analyze() {
   }
 }
 
-function render(data) {
+function render(data, btData, consData) {
   const a = data.analysis;
   const sig = data.signals;
 
@@ -240,6 +291,10 @@ function render(data) {
                  sig.verdict.includes("偏空") || sig.verdict.includes("强偏空") ? "signal-card bearish" : "signal-card neutral";
   let barPct = Math.min(Math.abs(sig.score) / 6 * 100, 100);
   let barColor = sig.score > 0 ? "#ec2c2c" : sig.score < 0 ? "#19a15f" : "#ff9800";
+
+  let numStrats = btData.strategies ? Object.keys(btData.strategies).length : 0;
+  let topStrat = btData.ranked_by_sharpe ? btData.ranked_by_sharpe[0] : null;
+  let topName = topStrat && btData.strategies[topStrat] ? btData.strategies[topStrat].name : "--";
 
   document.getElementById("cards").innerHTML = `
     <div class="card signal-card ${a.overall_trend.includes("上升")?"bullish":a.overall_trend.includes("下降")?"bearish":""}">
@@ -258,9 +313,27 @@ function render(data) {
       <div class="score-bar-wrap"><div class="score-bar-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     </div>
     <div class="card">
-      <div class="label">因子数</div>
-      <div class="value" style="font-size:16px">${data.factor_count||"--"}</div>
-      <div class="sub">趋势+波动+动量+成交量</div>
+      <div class="label">最佳策略</div>
+      <div class="value" style="font-size:14px">${topName}</div>
+      <div class="sub">共 ${numStrats} 个策略</div>
+    </div>
+    <div class="card">
+      <div class="label">策略共识</div>
+      <div class="value" style="font-size:16px;color:${consData.consensus&&consData.consensus.consensus.includes("偏多")?"#ec2c2c":"#19a15f"}">${consData.consensus?consData.consensus.consensus:"--"}</div>
+      <div class="sub">评分: ${consData.consensus?consData.consensus.aggregate_score:"--"}</div>
+    </div>
+  `;
+
+  // 共识横幅
+  let cons = consData.consensus || {};
+  let consClass = cons.consensus && cons.consensus.includes("偏多") ? "strong-bull" : "strong-bear";
+  let consRatio = cons.bullish_ratio ? (cons.bullish_ratio * 100) : 50;
+  document.getElementById("consensusBanner").innerHTML = `
+    <div class="consensus-banner ${consClass}">
+      多策略共识: ${cons.consensus||"--"} (评分:${cons.aggregate_score||0})
+      <div class="consensus-bar"><div class="consensus-bar-inner" style="width:${consRatio}%;background:${consRatio>50?"#ec2c2c":"#19a15f"}"></div></div>
+      <div style="font-size:10px;display:flex;justify-content:space-between"><span>偏空</span><span>偏多</span></div>
+      <div style="font-size:10px;color:#888;margin-top:4px">活跃策略: ${cons.active_strategies?Object.keys(cons.active_strategies).length:0} 个</div>
     </div>
   `;
 
@@ -276,17 +349,19 @@ function render(data) {
   // 支撑压力
   const sr = a.support_resistance||{};
   document.getElementById("srContent").innerHTML = `
-    <div style="font-size:12px;margin-bottom:4px"><span style="color:#4caf50">支撑:</span> ${sr.support||"--"} <span style="color:#ef5350;margin-left:8px">压力:</span> ${sr.resistance||"--"}</div>
-  `;
+    <div style="font-size:12px;margin-bottom:4px"><span style="color:#4caf50">支撑:</span> ${sr.support||"--"} <span style="color:#ef5350;margin-left:8px">压力:</span> ${sr.resistance||"--"}</div>`;
 
   // 信号
   let sigHtml = "";
   (sig.active||[]).forEach(s => {
     let bc = s.direction==="bullish"?"bullish":s.direction==="bearish"?"bearish":"neutral";
     let dl = s.direction==="bullish"?"看多":s.direction==="bearish"?"看空":"中性";
-    sigHtml += `<div class="signal-item"><span class="sig-badge ${bc}">${dl}</span><span>${s.name}</span><span style="font-size:10px;color:#999;margin-left:4px">S${s.strength}</span><span class="sig-date">${s.last_date||""}</span></div>`;
+    sigHtml += `<div class="signal-item"><span class="sig-badge ${bc}">${dl}</span><span>${s.name}</span><span style="font-size:10px;color:#999;margin-left:4px">强度${s.strength}</span><span class="sig-date">${s.last_date||""}</span></div>`;
   });
   document.getElementById("signalContent").innerHTML = sigHtml || '<div style="color:#aaa;font-size:12px">近期无信号</div>';
+
+  // 策略回测表格
+  renderStrategyTable(btData);
 
   // 交叉
   let crossHtml = "";
@@ -300,15 +375,79 @@ function render(data) {
     document.getElementById("chartImg").src = `/api/chart?path=${encodeURIComponent(data.chart_path)}&t=${Date.now()}`;
   }
 
-  // 加载因子 (异步)
-  loadFactors(ticker, document.getElementById("periodSelect").value);
+  // 加载因子
+  loadFactors(currentTicker, document.getElementById("periodSelect").value);
+}
+
+function renderStrategyTable(btData) {
+  const strategies = btData.strategies || {};
+  const ranked = btData.ranked_by_sharpe || [];
+  if (!ranked.length) {
+    document.getElementById("strategyContent").innerHTML = '<div style="color:#aaa;text-align:center;padding:20px">无回测数据</div>';
+    return;
+  }
+
+  let html = `<div class="strat-table"><table><tr>
+    <th>#</th><th>策略</th><th>类别</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>交易</th><th>盈亏比</th>
+  </tr>`;
+
+  ranked.forEach((sid, idx) => {
+    const s = strategies[sid];
+    if (!s) return;
+    let rankClass = idx === 0 ? "gold" : idx === 1 ? "silver" : idx === 2 ? "bronze" : "";
+    let retClass = parseFloat(s.total_return) > 0 ? "green" : "red";
+    html += `<tr>
+      <td><span class="strat-rank ${rankClass}">${idx+1}</span></td>
+      <td style="font-weight:600;white-space:nowrap">${s.name}</td>
+      <td style="font-size:10px;color:#999">${s.category}</td>
+      <td class="${retClass}" style="font-weight:600">${s.total_return}</td>
+      <td>${s.sharpe_ratio}</td>
+      <td style="color:#ec2c2c">${s.max_drawdown}</td>
+      <td>${s.win_rate}</td>
+      <td>${s.total_trades}</td>
+      <td>${s.profit_factor}</td>
+    </tr>`;
+  });
+  html += "</table></div>";
+
+  // 顶部策略活跃信号
+  let activeHtml = "<div style='margin-top:8px;padding-top:8px;border-top:1px solid #eee'><div style='font-size:11px;font-weight:600;color:#999;margin-bottom:4px'>当前活跃策略信号</div>";
+  (btData.consensus||{}).active_strategies || {};
+  // 从consensus data获取
+  fetch(`/api/consensus/${currentTicker}?period=${document.getElementById("periodSelect").value}`)
+    .then(r => r.json())
+    .then(data => {
+      let signals = data.consensus && data.consensus.active_strategies || {};
+      let sigHtml = "";
+      for (const [sid, info] of Object.entries(signals)) {
+        let cls = info.signal > 0 ? "buy" : "sell";
+        let txt = info.signal >= 2 ? "强买" : info.signal === 1 ? "买入" : info.signal <= -2 ? "强卖" : "卖出";
+        sigHtml += `<div class="strat-signal ${cls}"><span>${info.name}</span><span style="font-weight:600">${txt}</span></div>`;
+      }
+      document.getElementById("strategySignals").innerHTML = sigHtml || '<div style="font-size:11px;color:#aaa">无活跃信号</div>';
+    });
+
+  document.getElementById("strategyContent").innerHTML = html + activeHtml + '<div id="strategySignals" style="max-height:150px;overflow-y:auto"></div>';
+}
+
+async function genStrategyChart() {
+  if (!currentTicker) return;
+  const tab = document.getElementById("tab-chart-strategy");
+  tab.innerHTML = '<div style="padding:20px;color:#888"><div class="spinner"></div><p>生成策略信号图...</p></div>';
+  try {
+    const res = await fetch(`/api/strategy_chart/${currentTicker}?period=${document.getElementById("periodSelect").value}`);
+    const data = await res.json();
+    if (data.error) { tab.innerHTML = `<div style="color:red">${data.error}</div>`; return; }
+    tab.innerHTML = `<img src="/api/chart?path=${encodeURIComponent(data.chart_path)}&t=${Date.now()}" style="width:100%;border-radius:4px" />`;
+  } catch(e) {
+    tab.innerHTML = `<div style="color:red">生成失败: ${e.message}</div>`;
+  }
 }
 
 async function loadFactors(ticker, period) {
   try {
     const res = await fetch(`/api/factors/${ticker}?period=${period}`);
     const data = await res.json();
-    if (data.error) return;
     const factors = data.factors||{};
     let html = "<table><tr><th>因子</th><th>类别</th><th>值</th></tr>";
     for (const [key, f] of Object.entries(factors)) {
@@ -316,9 +455,7 @@ async function loadFactors(ticker, period) {
     }
     html += "</table>";
     document.getElementById("factorContent").innerHTML = html;
-  } catch(e) {
-    document.getElementById("factorContent").innerHTML = '<div style="color:#aaa">加载失败</div>';
-  }
+  } catch(e) { document.getElementById("factorContent").innerHTML = '<div style="color:#aaa">加载失败</div>'; }
 }
 
 async function patternSearch() {
@@ -327,38 +464,22 @@ async function patternSearch() {
   const resultsEl = document.getElementById("patternResults");
   const featEl = document.getElementById("patternFeatures");
   resultsEl.innerHTML = '<div style="color:#888">搜索中...</div>';
-
   try {
     const res = await fetch(`/api/pattern_search/${ticker}?type=${type}&window=30&top_n=5`);
     const data = await res.json();
     if (data.error) { resultsEl.innerHTML = `<div style="color:red">${data.error}</div>`; return; }
-
-    // 特征
     const feat = data.pattern_features||{};
     featEl.innerHTML = `类型: <b>${feat.pattern_type||"--"}</b> | 回报: ${feat.total_return||"--"}% | 波动: ${feat.volatility||"--"}% | 斜率: ${feat.slope||"--"}`;
-
-    // 结果
     let html = "";
     const items = data.similar_periods || data.similar_stocks || [];
     items.forEach(item => {
-      html += `<div class="search-result">
-        <div><span class="corr">corr=${item.correlation}</span>
-        ${item.ticker?` | 股票: <b>${item.ticker}</b>`:""}
-        ${item.pattern_type?`<span class="pattern-type">${item.pattern_type}</span>`:""}
-        </div>
-        <div style="color:#888;font-size:11px">${item.start_date?item.start_date.slice(0,10):""} ~ ${item.end_date?item.end_date.slice(0,10):""}</div>
-      </div>`;
+      html += `<div class="search-result"><div><span style="font-weight:600;color:#0984e3">corr=${item.correlation}</span> ${item.ticker?`股票: <b>${item.ticker}</b>`:""} ${item.pattern_type?`<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#e0e0e0;color:#555;margin-left:4px">${item.pattern_type}</span>`:""}</div><div style="color:#888;font-size:11px">${(item.start_date||"").slice(0,10)} ~ ${(item.end_date||"").slice(0,10)}</div></div>`;
     });
     resultsEl.innerHTML = html || '<div style="color:#aaa">无相似结果</div>';
-  } catch(e) {
-    resultsEl.innerHTML = `<div style="color:red">搜索失败: ${e.message}</div>`;
-  }
+  } catch(e) { resultsEl.innerHTML = `<div style="color:red">搜索失败: ${e.message}</div>`; }
 }
 
-// 回车触发
 document.getElementById("tickerInput").addEventListener("keydown", e => { if(e.key==="Enter") analyze() });
-
-// 自动分析
 analyze();
 </script>
 </body>

@@ -21,6 +21,9 @@ pip install -r requirements.txt
 # CLI
 python src/analyzer.py NVDA
 
+# Backtest a specific strategy
+python src/analyzer.py NVDA --strategy full_monty
+
 # Web dashboard
 python src/api.py
 # Open http://localhost:5000
@@ -66,6 +69,45 @@ The system now registers **34 signals** across 4 categories:
 
 Each signal includes direction (bullish/bearish/neutral) and strength score, and contributes to a composite verdict.
 
+## Strategy Engine (NEW)
+
+The system now treats every indicator "line" as a **factor** and combines multiple factors into actionable **strategies**.
+
+- **20 strategies** across 5 categories: Trend Following, Momentum Reversal, Volume Confirmation, Volatility Breakout, Multi-Confirmation
+- Each strategy emits **BUY / STRONG_BUY / SELL / STRONG_SELL** signals
+- Built-in backtest engine with stop-loss, take-profit, and max-hold-days
+- Strategy ranking by Sharpe ratio, return, win rate, max drawdown, profit factor
+- **Multi-strategy consensus** aggregates all 20 strategies into a single score
+
+Example CLI output:
+
+```bash
+$ python src/analyzer.py AAPL --period 6mo
+
+🏆 Top 5 Strategies by Sharpe:
+  1. Stochastic双线交叉   收益 11.4%  夏普 2.06  胜率 67%  交易3次
+  2. OBV背离             收益  8.5%  夏普 1.06  胜率 75%  交易4次
+  3. 均线多头排列         收益  5.7%  夏普 1.03  胜率100%  交易2次
+
+🗳 多策略共识: 偏空 (评分: -2)
+```
+
+## Web Dashboard
+
+```bash
+python src/api.py
+```
+
+Interactive dashboard with:
+- Stock ticker input + period selector
+- Overall trend card (上升 / 下降 / 横盘)
+- MA alignment card (多头排列 / 空头排列 / 交织)
+- Signal score card with bullish/bearish verdict
+- **Strategy panel** showing backtest leaderboard + multi-strategy consensus
+- **Strategy signal chart** showing BUY/SELL markers for top-performing strategies
+- Slope panel, support/resistance, pattern search, factor table
+- Professional candlestick charts with 30+ indicator lines and multi-panel mode
+
 ## Project Structure
 
 ```
@@ -83,9 +125,12 @@ flow/
 │   ├── data_loader.py       # yfinance / local CSV data loading
 │   ├── indicators.py        # MA, slope, trend, crosses, support/resistance
 │   ├── patterns.py          # Trend lines, slope, curves, candlestick patterns
+│   ├── factors.py           # 85+ factor calculation (MA, volatility, momentum, volume, structure, adaptive)
+│   ├── pattern_search.py    # Historical / cross-stock pattern similarity search
+│   ├── strategies.py        # Multi-factor strategy engine + backtest framework
 │   ├── stats.py             # Signal forward-return statistics
 │   ├── report.py            # Markdown report generation
-│   └── chart.py             # mplfinance candlestick charts with trend lines
+│   └── chart.py             # mplfinance candlestick charts with multi-panel support
 └── web/
     └── index.html           # Dashboard frontend
 ```
