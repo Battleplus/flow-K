@@ -872,7 +872,7 @@ def backtest_strategy(
 HOLD_PROFILES = {
     "short":  {"hold_min": 1,   "hold_max": 15,  "sl": 0.04, "tp": 0.08,  "label": "短线 (1-15天)"},
     "medium": {"hold_min": 30,  "hold_max": 180, "sl": 0.0,  "tp": 0.0,   "label": "中线 (30-180天,无止损)"},
-    "long":   {"hold_min": 180, "hold_max": 365, "sl": 0.0,  "tp": 0.0,   "label": "长线 (180-365天,无止损)"},
+    "long":   {"hold_min": 180, "hold_max": 360, "sl": 0.0,  "tp": 0.0,   "label": "长线 (180-360天,无止损)"},
 }
 
 

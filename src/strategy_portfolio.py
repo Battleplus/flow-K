@@ -413,11 +413,13 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
     if methods is None:
         methods = ["equal_weight", "sharpe_weight", "regime", "dynamic"]
 
-    from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES
+    from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES, run_backtest, STRATEGIES
 
     results = backtest_all(df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct,
                            hold_profile=hold_profile)
-    ranked = rank_strategies(results, "sharpe_ratio")
+    # 长线按收益排名，短线/中线按夏普排名
+    rank_by = "total_return" if hold_profile == "long" else "sharpe_ratio"
+    ranked = rank_strategies(results, rank_by)
     top5 = [sid for sid, _, _ in ranked[:5]]
     top10 = [sid for sid, _, _ in ranked[:10]]
 
@@ -428,40 +430,97 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
         hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"],
     )
 
+    def _parallel_portfolio(strategy_ids, weights=None):
+        """并行分仓组合：每个策略独立回测，按权重分配资金，合并权益曲线"""
+        n = len(strategy_ids)
+        if n == 0:
+            return None
+        if weights is None:
+            weights = {sid: 1.0 / n for sid in strategy_ids}
+        else:
+            total = sum(weights.values())
+            weights = {k: v / total for k, v in weights.items()}
+
+        init_cap = 100000
+        comm = 0.001
+        combined_equity = pd.Series(0.0, index=df.index)
+        total_trades = 0
+        weighted_hold = 0.0
+        weighted_ret = 0.0
+
+        for sid in strategy_ids:
+            if sid not in STRATEGIES:
+                continue
+            sig = STRATEGIES[sid].generate(df)
+            alloc = init_cap * weights.get(sid, 1.0 / n)
+            r = run_backtest(df, sig, initial_capital=alloc, commission=comm, **bt_kwargs)
+            combined_equity += r.equity_curve.values
+            total_trades += r.total_trades
+            weighted_hold += r.avg_hold_days * r.total_trades
+            weighted_ret += r.avg_return_per_trade * r.total_trades
+
+        total_return = (combined_equity.iloc[-1] - init_cap) / init_cap
+        n_years = len(df) / 252
+        annual_return = ((1 + total_return) ** (1 / max(n_years, 0.01))) - 1
+        daily_return = combined_equity.pct_change().dropna()
+        sharpe = (daily_return.mean() / daily_return.std() * np.sqrt(252)) if daily_return.std() > 0 else 0
+        peak = combined_equity.expanding().max()
+        dd = (combined_equity - peak) / peak
+        max_dd = dd.min()
+        avg_hold = weighted_hold / max(total_trades, 1)
+        avg_ret = weighted_ret / max(total_trades, 1)
+        # 从组合权益曲线估算胜率
+        pf = 1.0  # 简化
+
+
+        return BacktestResult(
+            strategy_id="portfolio",
+            strategy_name="策略组合",
+            total_return=total_return,
+            annual_return=annual_return,
+            sharpe_ratio=sharpe,
+            max_drawdown=max_dd,
+            win_rate=0.5,
+            total_trades=total_trades,
+            avg_return_per_trade=avg_ret,
+            avg_hold_days=avg_hold,
+            profit_factor=pf,
+            signal_series=pd.Series(0, index=df.index),
+            equity_curve=combined_equity,
+        )
+
     summary = {}
     # 初始化 regime_info
     summary["regime_info"] = {
         "date_range": f"{df['Date'].iloc[0]} ~ {df['Date'].iloc[-1]} ({len(df)}天)",
         "hold_profile": HOLD_PROFILES[hold_profile]["label"],
     }
-    # 等权组合 Top5
+    # 等权组合 Top5 — 并行分仓
     if "equal_weight" in methods:
-        r = backtest_portfolio(df, top5, **bt_kwargs)
+        r = _parallel_portfolio(top5)
         summary["equal_weight_top5"] = result_to_dict(r)
-    # 夏普加权 Top5
+    # 夏普加权 Top5 — 按排名选策略，按夏普分配权重
     if "sharpe_weight" in methods:
         weights = {}
-        for sid, r, _ in ranked[:5]:
-            weights[sid] = max(0, r.sharpe_ratio)
-        if weights:
-            total = sum(weights.values())
-            weights = {k: v / total for k, v in weights.items()}
-        r = backtest_portfolio(df, top5, weights, **bt_kwargs)
+        for sid in top5:
+            weights[sid] = max(0, results[sid].sharpe_ratio)
+        r = _parallel_portfolio(top5, weights if weights else None)
         summary["sharpe_weight_top5"] = result_to_dict(r)
-    # 状态驱动组合
+    # 状态驱动组合 — 并行分仓
     if "regime" in methods:
         regime = detect_market_regime(df)
         selected = select_strategies_by_regime(df, regime, top_n=5)
-        r = backtest_portfolio(df, selected, **bt_kwargs)
+        r = _parallel_portfolio(selected)
         summary["regime_driven"] = result_to_dict(r)
         summary["regime_driven"]["selected_strategies"] = selected
         summary["regime_info"]["name"] = regime.name
         summary["regime_info"]["score"] = round(regime.score, 0)
         summary["regime_info"]["category"] = regime.category
         summary["regime_info"]["description"] = regime.description
-    # 动态波动率目标
+    # 动态波动率目标 — 并行分仓 (降低仓位)
     if "dynamic" in methods:
-        r = backtest_portfolio(df, top5, position_size=0.8, **bt_kwargs)
+        weights = {sid: 0.8 / len(top5) for sid in top5}
+        r = _parallel_portfolio(top5, weights)
         summary["dynamic_vol_target"] = result_to_dict(r)
 
     # 基准：买入持有

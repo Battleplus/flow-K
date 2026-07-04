@@ -50,11 +50,26 @@ def fetch_data(ticker: str, period: str = "1y", interval: str = "1d") -> pd.Data
         if not sub.empty:
             sub = sub.sort_values("Date").reset_index(drop=True)
             # 根据 period 截取
-            period_map = {"1y": 365, "6mo": 180, "3mo": 90, "1mo": 30, "5y": 1825, "max": 99999}
+            period_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730, "3y": 1095, "5y": 1825, "max": 99999}
             days = period_map.get(period, 365)
-            sub = sub[sub["Date"] >= sub["Date"].max() - pd.Timedelta(days=days)]
-            sub["Date"] = sub["Date"].dt.date
-            return sub[REQUIRED]
+            cutoff = sub["Date"].max() - pd.Timedelta(days=days)
+            sub_cut = sub[sub["Date"] >= cutoff].copy()
+            # CSV 数据覆盖不足时，用 yfinance 补充
+            if len(sub_cut) < days * 0.4 and days > 365:
+                try:
+                    import yfinance as yf
+                    stock = yf.Ticker(t)
+                    yf_df = stock.history(period=period, interval="1d")
+                    if not yf_df.empty and len(yf_df) > len(sub_cut):
+                        yf_df = yf_df[["Open", "High", "Low", "Close", "Volume"]].copy()
+                        yf_df.index = pd.to_datetime(yf_df.index)
+                        yf_df["Date"] = yf_df.index.date
+                        yf_df["Ticker"] = t
+                        return yf_df[REQUIRED].sort_values("Date").reset_index(drop=True)
+                except Exception:
+                    pass
+            sub_cut["Date"] = sub_cut["Date"].dt.date
+            return sub_cut[REQUIRED]
 
     # Fallback: yfinance
     import yfinance as yf
