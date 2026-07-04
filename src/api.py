@@ -19,6 +19,56 @@ from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity
 
 app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 
+# 缓存股票列表
+_TICKERS_CACHE = None
+
+def _load_tickers():
+    global _TICKERS_CACHE
+    if _TICKERS_CACHE is not None:
+        return _TICKERS_CACHE
+    result = []
+    # 从 company_info.csv 读取
+    info_path = ROOT / "data" / "company_info.csv"
+    if info_path.exists():
+        try:
+            info = pd.read_csv(info_path)
+            for _, r in info.iterrows():
+                sym = str(r.get("Symbol","")).strip()
+                if sym and sym != "nan":
+                    result.append({
+                        "symbol": sym,
+                        "name": str(r.get("Company",""))[:30],
+                        "sector": str(r.get("Sector",""))[:20],
+                    })
+        except Exception:
+            pass
+    # 从历史CSV读取有数据的股票
+    csv_path = ROOT / "SP500_Historical_Data.csv"
+    if csv_path.exists():
+        try:
+            hist_syms = set(pd.read_csv(csv_path, usecols=["Ticker"])["Ticker"].unique())
+            # 只保留有历史数据的
+            result = [t for t in result if t["symbol"] in hist_syms]
+            # 补上CSV里有但info里没有的
+            known = {t["symbol"] for t in result}
+            for sym in hist_syms:
+                if sym not in known:
+                    result.append({"symbol": sym, "name": "", "sector": ""})
+        except Exception:
+            pass
+    _TICKERS_CACHE = result
+    return result
+
+
+@app.route("/api/tickers")
+def api_tickers():
+    """返回所有可用股票代码+名称+行业，供下拉选择"""
+    tickers = _load_tickers()
+    q = request.args.get("q", "").upper().strip()
+    if q:
+        tickers = [t for t in tickers if q in t["symbol"] or q.upper() in t["name"].upper()]
+    return jsonify({"count": len(tickers), "tickers": tickers[:200]})
+
 
 @app.route("/")
 def index():
@@ -126,9 +176,12 @@ def api_backtest(ticker):
     capital = float(request.args.get("capital", 100000))
     worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
     limit_pct = float(request.args.get("limit", 0))
+    hold_profile = request.args.get("hold", "medium")
+    if hold_profile not in ("short", "medium", "long"):
+        hold_profile = "medium"
 
     try:
-        from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary
+        from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary, HOLD_PROFILES
 
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
@@ -137,7 +190,8 @@ def api_backtest(ticker):
             if strategy_id not in STRATEGIES:
                 return jsonify({"error": f"未知策略: {strategy_id}"}), 400
             r = backtest_strategy(df, strategy_id, initial_capital=capital,
-                                  worst_case=worst_case, limit_pct=limit_pct)
+                                  worst_case=worst_case, limit_pct=limit_pct,
+                                  hold_override=HOLD_PROFILES[hold_profile])
             result = {
                 "ticker": ticker.upper(),
                 "period": period,
@@ -154,16 +208,21 @@ def api_backtest(ticker):
                 "profit_factor": round(r.profit_factor, 2),
                 "worst_case": worst_case,
                 "limit_pct": limit_pct,
+                "hold_profile": hold_profile,
                 # 最近20天的信号
                 "recent_signals": r.signal_series.iloc[-20:].tolist(),
             }
         else:
             results = backtest_all(df, initial_capital=capital, min_trades=1,
-                                   worst_case=worst_case, limit_pct=limit_pct)
+                                   worst_case=worst_case, limit_pct=limit_pct,
+                                   hold_profile=hold_profile)
             summary_df = get_strategy_summary(results)
             result = {
                 "ticker": ticker.upper(),
                 "period": period,
+                "hold_profile": hold_profile,
+                "hold_label": HOLD_PROFILES[hold_profile]["label"],
+                "worst_case": worst_case,
                 "strategies": {},
                 "ranked_by_sharpe": [],
             }
@@ -238,24 +297,39 @@ def api_portfolio(ticker):
     period = request.args.get("period", "1y")
     worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
     limit_pct = float(request.args.get("limit", 0))
+    hold_profile = request.args.get("hold", "medium")
+    if hold_profile not in ("short", "medium", "long"):
+        hold_profile = "medium"
+
     try:
         from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
-        from src.strategies import backtest_all, rank_strategies
+        from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES
 
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
 
-        summary = analyze_portfolio(df, worst_case=worst_case, limit_pct=limit_pct)
+        summary = analyze_portfolio(df, worst_case=worst_case, limit_pct=limit_pct,
+                                    hold_profile=hold_profile)
 
-        # 用等权 Top5 组合生成权益曲线图
-        ranked = rank_strategies(backtest_all(df, worst_case=worst_case, limit_pct=limit_pct), "sharpe_ratio")
+        hp = HOLD_PROFILES[hold_profile]
+        bt_all = backtest_all(df, worst_case=worst_case, limit_pct=limit_pct,
+                              hold_profile=hold_profile)
+        ranked = rank_strategies(bt_all, "sharpe_ratio")
         top5 = [sid for sid, _, _ in ranked[:5]]
-        portfolio_result = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct)
+        portfolio_result = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct,
+                                              stop_loss_pct=hp["sl"], take_profit_pct=hp["tp"],
+                                              hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"])
         chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
 
         return jsonify({
             "ticker": ticker.upper(),
             "period": period,
+            "hold_profile": hold_profile,
+            "hold_label": HOLD_PROFILES[hold_profile]["label"],
+            "hold_params": {
+                "hold_min": hp["hold_min"], "hold_max": hp["hold_max"],
+                "stop_loss_pct": round(hp["sl"] * 100, 1), "take_profit_pct": round(hp["tp"] * 100, 1),
+            },
             "market_regime": summary.get("regime_info", {}),
             "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
             "buy_hold": summary.get("buy_hold", {}),

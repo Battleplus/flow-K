@@ -152,7 +152,13 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 <header>
   <h1>FLOW AI · 多因子策略引擎</h1>
   <div class="toolbar">
-    <input id="tickerInput" placeholder="股票代码" value="NVDA" />
+    <div style="position:relative;display:inline-block">
+      <select id="tickerInput" onchange="analyze()" title="选择股票代码"
+              style="padding:6px 28px 6px 12px;font-size:14px;border:1px solid #555;border-radius:6px;background:#2d2d44;color:#fff;width:170px;appearance:none;-webkit-appearance:none">
+        <option value="NVDA" selected>NVDA</option>
+      </select>
+      <button onclick="loadTickers()" id="reloadTickersBtn" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:#aaa;cursor:pointer;font-size:12px;padding:2px" title="刷新股票列表">▼</button>
+    </div>
     <select id="periodSelect">
       <option value="1y" selected>1年</option>
       <option value="6mo">6个月</option>
@@ -160,10 +166,16 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
     </select>
     <button onclick="analyze()">分析</button>
     <span style="color:#888">|</span>
+    <select id="holdSelect" onchange="analyze()" style="padding:5px 10px;font-size:13px;border:1px solid #555;border-radius:6px;background:#2d2d44;color:#fff;cursor:pointer">
+      <option value="short">短线 (1-15天)</option>
+      <option value="medium" selected>中线 (30-180天,无止损)</option>
+      <option value="long">长线 (180-365天,无止损)</option>
+    </select>
+    <span style="color:#888">|</span>
     <button class="mode-btn active" data-mode="multi" onclick="setMode('multi')">多面板</button>
     <button class="mode-btn" data-mode="single" onclick="setMode('single')">单面板</button>
     <span style="color:#888">|</span>
-    <button onclick="window.open('/report','_blank')" style="background:#e17055">回测报告</button>
+    <a href="/report" target="_blank" style="background:#e17055;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-size:13px;display:inline-block">回测报告</a>
     <span class="status" id="statusBar">就绪</span>
   </div>
 </header>
@@ -301,6 +313,33 @@ let currentMode = "multi";
 let currentTicker = "";
 let strategyData = null;
 
+async function loadTickers() {
+  const sel = document.getElementById("tickerInput");
+  const btn = document.getElementById("reloadTickersBtn");
+  const current = sel.value;
+  btn.disabled = true;
+  btn.style.opacity = "0.5";
+  try {
+    const res = await fetch("/api/tickers");
+    const data = await res.json();
+    sel.innerHTML = "";
+    (data.tickers || []).forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t.symbol;
+      opt.textContent = `${t.symbol}${t.name ? ' - ' + t.name : ''}${t.sector ? ' / ' + t.sector : ''}`;
+      sel.appendChild(opt);
+    });
+    if (current && Array.from(sel.options).some(o => o.value === current)) {
+      sel.value = current;
+    }
+  } catch (e) {
+    console.error("加载股票列表失败", e);
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+  }
+}
+
 function setMode(mode) {
   currentMode = mode;
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
@@ -332,11 +371,12 @@ async function analyze() {
 
   try {
     const period = document.getElementById("periodSelect").value;
+    const hold = document.getElementById("holdSelect").value;
     const [analyzeRes, backtestRes, consensusRes, portfolioRes] = await Promise.all([
       fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`).then(r => r.json()),
-      fetch(`/api/backtest/${ticker}?period=${period}`).then(r => r.json()),
+      fetch(`/api/backtest/${ticker}?period=${period}&hold=${hold}`).then(r => r.json()),
       fetch(`/api/consensus/${ticker}?period=${period}`).then(r => r.json()),
-      fetch(`/api/portfolio/${ticker}?period=${period}`).then(r => r.json()),
+      fetch(`/api/portfolio/${ticker}?period=${period}&hold=${hold}`).then(r => r.json()),
     ]);
     strategyData = backtestRes;
     render(analyzeRes, backtestRes, consensusRes, portfolioRes);
@@ -461,12 +501,14 @@ function render(data, btData, consData, portfolioData) {
 function renderStrategyTable(btData) {
   const strategies = btData.strategies || {};
   const ranked = btData.ranked_by_sharpe || [];
+  const holdLabel = btData.hold_label || '';
   if (!ranked.length) {
     document.getElementById("strategyContent").innerHTML = '<div style="color:#aaa;text-align:center;padding:20px">无回测数据</div>';
     return;
   }
 
-  let html = `<div class="strat-table"><table><tr>
+  let html = `<div style="font-size:11px;color:#999;margin-bottom:4px">持仓周期: <b>${holdLabel}</b></div>`;
+  html += `<div class="strat-table"><table><tr>
     <th>#</th><th>策略</th><th>类别</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>交易</th><th>盈亏比</th>
   </tr>`;
 
@@ -519,6 +561,15 @@ function renderPortfolio(data) {
   const portfolios = data.portfolios || {};
   const top = data.top_strategies || [];
   const bh = data.buy_hold || {};
+  const hp = data.hold_params || {};
+
+  // 持仓参数行
+  let hpHtml = "";
+  if (data.hold_label) {
+    const slTxt = hp.stop_loss_pct > 0 ? `止损 -${hp.stop_loss_pct}%` : '无止损';
+    const tpTxt = hp.take_profit_pct > 0 ? `止盈 +${hp.take_profit_pct}%` : '无止盈';
+    hpHtml = `<div style="font-size:11px;color:#0984e3;margin-bottom:6px">持仓: ${data.hold_label} | ${slTxt} | ${tpTxt} | ${hp.hold_min}-${hp.hold_max}天</div>`;
+  }
 
   // 市场状态卡片
   let regimeHtml = `
@@ -578,7 +629,7 @@ function renderPortfolio(data) {
     chartHtml = `<img class="portfolio-img" src="/api/chart?path=${encodeURIComponent(data.portfolio_chart_path)}&t=${Date.now()}" alt="组合权益曲线" />`;
   }
 
-  document.getElementById("portfolioContent").innerHTML = regimeHtml + portHtml + topHtml + chartHtml;
+  document.getElementById("portfolioContent").innerHTML = hpHtml + regimeHtml + portHtml + topHtml + chartHtml;
 }
 
 async function genStrategyChart() {
@@ -631,6 +682,7 @@ async function patternSearch() {
 }
 
 document.getElementById("tickerInput").addEventListener("keydown", e => { if(e.key==="Enter") analyze() });
+loadTickers();
 analyze();
 
 // ═══════════════════════════════════════════

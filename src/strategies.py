@@ -151,9 +151,9 @@ def run_backtest(
             exit_reason = None
             if sig_val < 0 and hold_days >= hold_days_min:
                 exit_reason = "signal"
-            elif pnl_pct <= -stop_loss_pct:
+            elif stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
                 exit_reason = "stop_loss"
-            elif pnl_pct >= take_profit_pct:
+            elif take_profit_pct > 0 and pnl_pct >= take_profit_pct:
                 exit_reason = "take_profit"
             elif hold_days >= hold_days_max:
                 exit_reason = "timeout"
@@ -833,23 +833,47 @@ def backtest_strategy(
     initial_capital: float = 100000,
     worst_case: bool = False,
     limit_pct: float = 0.0,
+    hold_override: Optional[Dict[str, int]] = None,
 ) -> BacktestResult:
-    """回测单个策略"""
+    """
+    回测单个策略
+    hold_override: 可选，覆盖持仓参数 {"hold_min": 3, "hold_max": 30, "sl": 0.06, "tp": 0.12}
+    """
     strat = STRATEGIES[strategy_id]
     signals = strat.generate(df)
+    params = {
+        "stop_loss_pct": strat.stop_loss_pct,
+        "take_profit_pct": strat.take_profit_pct,
+        "hold_days_min": strat.hold_days_min,
+        "hold_days_max": strat.hold_days_max,
+    }
+    if hold_override:
+        if "hold_min" in hold_override:
+            params["hold_days_min"] = hold_override["hold_min"]
+        if "hold_max" in hold_override:
+            params["hold_days_max"] = hold_override["hold_max"]
+        if "sl" in hold_override:
+            params["stop_loss_pct"] = hold_override["sl"]
+        if "tp" in hold_override:
+            params["take_profit_pct"] = hold_override["tp"]
     result = run_backtest(
         df, signals,
-        stop_loss_pct=strat.stop_loss_pct,
-        take_profit_pct=strat.take_profit_pct,
-        hold_days_min=strat.hold_days_min,
-        hold_days_max=strat.hold_days_max,
         initial_capital=initial_capital,
         worst_case=worst_case,
         limit_pct=limit_pct,
+        **params,
     )
     result.strategy_id = strategy_id
     result.strategy_name = strat.name
     return result
+
+
+# 持仓周期预设
+HOLD_PROFILES = {
+    "short":  {"hold_min": 1,   "hold_max": 15,  "sl": 0.04, "tp": 0.08,  "label": "短线 (1-15天)"},
+    "medium": {"hold_min": 30,  "hold_max": 180, "sl": 0.0,  "tp": 0.0,   "label": "中线 (30-180天,无止损)"},
+    "long":   {"hold_min": 180, "hold_max": 365, "sl": 0.0,  "tp": 0.0,   "label": "长线 (180-365天,无止损)"},
+}
 
 
 def backtest_all(
@@ -858,13 +882,16 @@ def backtest_all(
     min_trades: int = 1,
     worst_case: bool = False,
     limit_pct: float = 0.0,
+    hold_profile: str = "medium",
 ) -> Dict[str, BacktestResult]:
     """对所有注册策略进行回测"""
+    hold_override = HOLD_PROFILES.get(hold_profile)
     results = {}
     for sid in STRATEGIES:
         try:
             r = backtest_strategy(df, sid, initial_capital=initial_capital,
-                                  worst_case=worst_case, limit_pct=limit_pct)
+                                  worst_case=worst_case, limit_pct=limit_pct,
+                                  hold_override=hold_override)
             if r.total_trades >= min_trades:
                 results[sid] = r
         except Exception as e:

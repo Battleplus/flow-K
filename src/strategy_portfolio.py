@@ -271,6 +271,7 @@ def backtest_portfolio(
     stop_loss_pct: float = 0.07,
     take_profit_pct: float = 0.12,
     hold_days_max: int = 30,
+    hold_days_min: int = 3,
     worst_case: bool = False,
     limit_pct: float = 0.0,
 ) -> BacktestResult:
@@ -307,11 +308,11 @@ def backtest_portfolio(
             hold_days = i - entry_idx
             pnl_pct = (price - entry_price) / entry_price
             exit_reason = None
-            if sig_val < 0 and hold_days >= 3:
+            if sig_val < 0 and hold_days >= hold_days_min:
                 exit_reason = "signal"
-            elif pnl_pct <= -stop_loss_pct:
+            elif stop_loss_pct > 0 and pnl_pct <= -stop_loss_pct:
                 exit_reason = "stop_loss"
-            elif pnl_pct >= take_profit_pct:
+            elif take_profit_pct > 0 and pnl_pct >= take_profit_pct:
                 exit_reason = "take_profit"
             elif hold_days >= hold_days_max:
                 exit_reason = "timeout"
@@ -399,28 +400,43 @@ def backtest_portfolio(
 # ═══════════════════════════════════════════════════════════════
 
 def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
-                      worst_case: bool = False, limit_pct: float = 0.0) -> Dict:
+                      worst_case: bool = False, limit_pct: float = 0.0,
+                      hold_profile: str = "medium") -> Dict:
     """
     分析多种组合方式:
       - equal_weight: 等权 Top5 策略
       - sharpe_weight: 按夏普加权
       - regime: 基于市场状态选择策略
       - dynamic: 等权 + 波动率目标仓位
+    hold_profile: short/medium/long 持仓周期
     """
     if methods is None:
         methods = ["equal_weight", "sharpe_weight", "regime", "dynamic"]
 
-    from src.strategies import backtest_all, rank_strategies
+    from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES
 
-    results = backtest_all(df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct)
+    results = backtest_all(df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct,
+                           hold_profile=hold_profile)
     ranked = rank_strategies(results, "sharpe_ratio")
     top5 = [sid for sid, _, _ in ranked[:5]]
     top10 = [sid for sid, _, _ in ranked[:10]]
 
+    hp = HOLD_PROFILES.get(hold_profile, HOLD_PROFILES["medium"])
+    bt_kwargs = dict(
+        worst_case=worst_case, limit_pct=limit_pct,
+        stop_loss_pct=hp["sl"], take_profit_pct=hp["tp"],
+        hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"],
+    )
+
     summary = {}
+    # 初始化 regime_info
+    summary["regime_info"] = {
+        "date_range": f"{df['Date'].iloc[0]} ~ {df['Date'].iloc[-1]} ({len(df)}天)",
+        "hold_profile": HOLD_PROFILES[hold_profile]["label"],
+    }
     # 等权组合 Top5
     if "equal_weight" in methods:
-        r = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct)
+        r = backtest_portfolio(df, top5, **bt_kwargs)
         summary["equal_weight_top5"] = result_to_dict(r)
     # 夏普加权 Top5
     if "sharpe_weight" in methods:
@@ -430,24 +446,22 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
         if weights:
             total = sum(weights.values())
             weights = {k: v / total for k, v in weights.items()}
-        r = backtest_portfolio(df, top5, weights, worst_case=worst_case, limit_pct=limit_pct)
+        r = backtest_portfolio(df, top5, weights, **bt_kwargs)
         summary["sharpe_weight_top5"] = result_to_dict(r)
     # 状态驱动组合
     if "regime" in methods:
         regime = detect_market_regime(df)
         selected = select_strategies_by_regime(df, regime, top_n=5)
-        r = backtest_portfolio(df, selected, worst_case=worst_case, limit_pct=limit_pct)
+        r = backtest_portfolio(df, selected, **bt_kwargs)
         summary["regime_driven"] = result_to_dict(r)
         summary["regime_driven"]["selected_strategies"] = selected
-        summary["regime_info"] = {
-            "name": regime.name,
-            "category": regime.category,
-            "score": regime.score,
-            "description": regime.description,
-        }
-    # 动态波动率目标: 用Top5策略,但按当前20日波动率调整仓位
+        summary["regime_info"]["name"] = regime.name
+        summary["regime_info"]["score"] = round(regime.score, 0)
+        summary["regime_info"]["category"] = regime.category
+        summary["regime_info"]["description"] = regime.description
+    # 动态波动率目标
     if "dynamic" in methods:
-        r = backtest_portfolio(df, top5, position_size=0.8, worst_case=worst_case, limit_pct=limit_pct)
+        r = backtest_portfolio(df, top5, position_size=0.8, **bt_kwargs)
         summary["dynamic_vol_target"] = result_to_dict(r)
 
     # 基准：买入持有
