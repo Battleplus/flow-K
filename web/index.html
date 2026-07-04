@@ -102,9 +102,36 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .strat-signal strong-buy{background:#ffcccc}
 .strat-signal strong-sell{background:#c8e6c9}
 
-/* 形态搜索 */
-.search-result{background:#f8f9fa;border-radius:6px;padding:8px;margin-top:6px;font-size:12px}
-.search-result .item{padding:3px 0;border-bottom:1px solid #eee}
+/* 组合面板 */
+.portfolio-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}
+.portfolio-table th{background:#f0f2f5;padding:5px 6px;text-align:left;font-size:10px;color:#999}
+.portfolio-table td{padding:5px 6px;border-bottom:1px solid #f5f5f5}
+.portfolio-table .method{font-weight:600}
+.portfolio-table .positive{color:#ec2c2c;font-weight:600}
+.portfolio-table .negative{color:#19a15f;font-weight:600}
+.regime-card{padding:10px;border-radius:8px;background:#f0f8ff;border:1px solid #0984e3;margin-bottom:10px}
+.regime-card .title{font-size:13px;font-weight:700;color:#1a1a2e}
+.regime-card .desc{font-size:11px;color:#666;margin-top:3px}
+.regime-card .score{font-size:11px;color:#0984e3;margin-top:3px}
+.portfolio-img{width:100%;border-radius:4px;margin-top:8px}
+
+/* 实时报价 */
+.quote-bar{display:flex;align-items:center;gap:12px;padding:8px 12px;background:#fff;border-radius:8px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);flex-wrap:wrap}
+.quote-price{font-size:22px;font-weight:800}
+.quote-change{font-size:14px;font-weight:600;padding:2px 10px;border-radius:6px}
+.quote-change.up{background:#ffeaea;color:#ec2c2c}
+.quote-change.down{background:#e8f5e9;color:#19a15f}
+.quote-info{font-size:11px;color:#999}
+.quote-info span{margin-right:12px}
+.intraday-chart{width:100%;height:300px;background:#fafafa;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:13px}
+.intraday-controls{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.intraday-controls button{padding:4px 10px;font-size:11px;border:1px solid #ddd;border-radius:4px;background:#f8f9fa;cursor:pointer}
+.intraday-controls button.active{background:#0984e3;color:#fff;border-color:#0984e3}
+.market-mini{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px}
+.market-mini .idx-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f5f5f5}
+.market-mini .idx-name{color:#666}
+.idx-up{color:#ec2c2c;font-weight:600}
+.idx-down{color:#19a15f;font-weight:600}
 
 /* 因子表 */
 .factor-table{max-height:300px;overflow-y:auto;font-size:12px}
@@ -151,12 +178,18 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
   <div class="content">
     <!-- 左侧: 图表 -->
     <div class="chart-section">
+      <!-- 实时报价条 -->
+      <div class="quote-bar" id="quoteBar">
+        <div style="color:#aaa;font-size:13px">加载实时报价...</div>
+      </div>
       <!-- 策略共识横幅 -->
       <div id="consensusBanner" style="margin-bottom:12px"></div>
       <div class="chart-box">
         <div class="tabs" style="margin-bottom:8px">
           <button class="active" onclick="switchChartTab('factor')">因子图表</button>
           <button onclick="switchChartTab('strategy')">策略信号图</button>
+          <button onclick="switchChartTab('portfolio')">组合权益图</button>
+          <button onclick="switchChartTab('intraday')">日内走势</button>
         </div>
         <div class="tab-content active" id="tab-chart-factor">
           <img id="chartImg" src="" alt="图表" style="width:100%;border-radius:4px" />
@@ -164,6 +197,21 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
         <div class="tab-content" id="tab-chart-strategy" style="text-align:center;padding:20px;color:#888">
           点击生成策略信号图
           <br><button onclick="genStrategyChart()" style="margin-top:10px;padding:8px 20px;font-size:13px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer">生成</button>
+        </div>
+        <div class="tab-content" id="tab-chart-portfolio">
+          <img id="portfolioChartImg" src="" alt="组合权益图" style="width:100%;border-radius:4px" />
+        </div>
+        <div class="tab-content" id="tab-chart-intraday">
+          <div class="intraday-controls">
+            <button class="active" data-int="5m" onclick="loadIntraday('5m')">5分钟</button>
+            <button data-int="15m" onclick="loadIntraday('15m')">15分钟</button>
+            <button data-int="30m" onclick="loadIntraday('30m')">30分钟</button>
+            <button data-int="60m" onclick="loadIntraday('60m')">60分钟</button>
+            <span style="margin-left:auto;font-size:11px;color:#aaa" id="intradayStatus"></span>
+          </div>
+          <div id="intradayArea">
+            <div class="intraday-chart">选择粒度查看日内走势</div>
+          </div>
         </div>
       </div>
     </div>
@@ -174,6 +222,7 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
       <div class="panel">
         <div class="tabs">
           <button class="active" onclick="switchTab('strategy')">策略</button>
+          <button onclick="switchTab('portfolio')">组合</button>
           <button onclick="switchTab('signals')">信号</button>
           <button onclick="switchTab('slopes')">斜率</button>
           <button onclick="switchTab('pattern')">形态</button>
@@ -184,6 +233,13 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
         <div class="tab-content active" id="tab-strategy">
           <div id="strategyContent" style="margin-top:4px">
             <div style="color:#aaa;font-size:12px;text-align:center;padding:20px">加载策略回测...</div>
+          </div>
+        </div>
+
+        <!-- 组合 Tab -->
+        <div class="tab-content" id="tab-portfolio">
+          <div id="portfolioContent" style="margin-top:4px">
+            <div style="color:#aaa;font-size:12px;text-align:center;padding:20px">加载组合分析...</div>
           </div>
         </div>
 
@@ -226,6 +282,14 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
         <h3>近期交叉</h3>
         <div id="crossContent"></div>
       </div>
+
+      <!-- 大盘快照 -->
+      <div class="panel" id="marketPanel">
+        <h3>大盘快照 <span style="font-size:10px;color:#aaa" id="marketTime"></span></h3>
+        <div class="market-mini" id="marketContent">
+          <div style="color:#aaa;font-size:11px">加载中...</div>
+        </div>
+      </div>
     </div>
   </div>
 </main>
@@ -242,16 +306,17 @@ function setMode(mode) {
 }
 
 function switchTab(tab) {
-  const tabs = ["strategy","signals","slopes","pattern","factors"];
+  const tabs = ["strategy","portfolio","signals","slopes","pattern","factors"];
   document.querySelectorAll(".sidebar .tabs button").forEach((b, i) => b.classList.toggle("active", tabs[i] === tab));
   document.querySelectorAll(".sidebar .tab-content").forEach(el => el.classList.remove("active"));
   document.getElementById("tab-" + tab).classList.add("active");
 }
 
 function switchChartTab(tab) {
-  document.querySelectorAll(".chart-box .tabs button").forEach((b, i) => b.classList.toggle("active", ["factor","strategy"][i] === tab));
+  document.querySelectorAll(".chart-box .tabs button").forEach((b, i) => b.classList.toggle("active", ["factor","strategy","portfolio","intraday"][i] === tab));
   document.querySelectorAll(".chart-box .tab-content").forEach(el => el.classList.remove("active"));
   document.getElementById("tab-chart-" + tab).classList.add("active");
+  if (tab === "intraday" && currentTicker) loadIntraday("5m");
 }
 
 async function analyze() {
@@ -265,15 +330,19 @@ async function analyze() {
 
   try {
     const period = document.getElementById("periodSelect").value;
-    const [analyzeRes, backtestRes, consensusRes] = await Promise.all([
+    const [analyzeRes, backtestRes, consensusRes, portfolioRes] = await Promise.all([
       fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`).then(r => r.json()),
       fetch(`/api/backtest/${ticker}?period=${period}`).then(r => r.json()),
       fetch(`/api/consensus/${ticker}?period=${period}`).then(r => r.json()),
+      fetch(`/api/portfolio/${ticker}?period=${period}`).then(r => r.json()),
     ]);
     strategyData = backtestRes;
-    render(analyzeRes, backtestRes, consensusRes);
+    render(analyzeRes, backtestRes, consensusRes, portfolioRes);
     document.getElementById("statusBar").textContent =
       `完成 | ${analyzeRes.data_start}~${analyzeRes.data_end} | ${analyzeRes.records}条 | ${analyzeRes.factor_count}因子`;
+    // 后台加载实时报价和大盘
+    loadQuote(ticker);
+    loadMarketSnapshot();
   } catch (e) {
     document.getElementById("statusBar").textContent = "出错: " + e.message;
   } finally {
@@ -282,7 +351,7 @@ async function analyze() {
   }
 }
 
-function render(data, btData, consData) {
+function render(data, btData, consData, portfolioData) {
   const a = data.analysis;
   const sig = data.signals;
 
@@ -375,8 +444,16 @@ function render(data, btData, consData) {
     document.getElementById("chartImg").src = `/api/chart?path=${encodeURIComponent(data.chart_path)}&t=${Date.now()}`;
   }
 
+  // 组合权益图 (放到左侧 tab)
+  if (portfolioData && portfolioData.portfolio_chart_path) {
+    document.getElementById("portfolioChartImg").src = `/api/chart?path=${encodeURIComponent(portfolioData.portfolio_chart_path)}&t=${Date.now()}`;
+  }
+
   // 加载因子
   loadFactors(currentTicker, document.getElementById("periodSelect").value);
+
+  // 组合面板
+  renderPortfolio(portfolioData);
 }
 
 function renderStrategyTable(btData) {
@@ -430,6 +507,78 @@ function renderStrategyTable(btData) {
   document.getElementById("strategyContent").innerHTML = html + activeHtml + '<div id="strategySignals" style="max-height:150px;overflow-y:auto"></div>';
 }
 
+function renderPortfolio(data) {
+  if (!data || data.error) {
+    document.getElementById("portfolioContent").innerHTML = '<div style="color:#aaa;text-align:center;padding:20px">组合数据加载失败</div>';
+    return;
+  }
+
+  const regime = data.market_regime || {};
+  const portfolios = data.portfolios || {};
+  const top = data.top_strategies || [];
+  const bh = data.buy_hold || {};
+
+  // 市场状态卡片
+  let regimeHtml = `
+    <div class="regime-card">
+      <div class="title">${regime.name || "--"}</div>
+      <div class="desc">${regime.description || ""}</div>
+      <div class="score">推荐类别: ${regime.category || "--"} | 置信度: ${regime.score || 0}</div>
+    </div>
+  `;
+
+  // 组合对比表
+  let portHtml = `<table class="portfolio-table"><tr>
+    <th>组合方式</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>交易</th>
+  </tr>`;
+  const methodNames = {
+    equal_weight_top5: "等权Top5",
+    sharpe_weight_top5: "夏普加权Top5",
+    regime_driven: "状态驱动",
+    dynamic_vol_target: "动态波动率"
+  };
+  for (const [key, p] of Object.entries(portfolios)) {
+    if (!p) continue;
+    let ret = p.total_return || 0;
+    let retClass = ret > 0 ? "positive" : ret < 0 ? "negative" : "";
+    portHtml += `<tr>
+      <td class="method">${methodNames[key] || key}</td>
+      <td class="${retClass}">${ret}%</td>
+      <td>${p.sharpe_ratio}</td>
+      <td style="color:#ec2c2c">${p.max_drawdown}%</td>
+      <td>${p.win_rate}%</td>
+      <td>${p.total_trades}</td>
+    </tr>`;
+  }
+  portHtml += `<tr style="background:#fafafa">
+    <td class="method">买入持有</td>
+    <td>${bh.total_return || 0}%</td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+  </tr>`;
+  portHtml += "</table>";
+
+  // Top策略
+  let topHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee"><div style="font-size:11px;font-weight:600;color:#999;margin-bottom:4px">Top 5 策略</div>`;
+  top.forEach((s, i) => {
+    topHtml += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0">
+      <span>${i+1}. ${s.name}</span>
+      <span style="color:#0984e3">夏普 ${s.sharpe} | 收益 ${s.total_return}%</span>
+    </div>`;
+  });
+  topHtml += "</div>";
+
+  // 组合权益图
+  let chartHtml = "";
+  if (data.portfolio_chart_path) {
+    chartHtml = `<img class="portfolio-img" src="/api/chart?path=${encodeURIComponent(data.portfolio_chart_path)}&t=${Date.now()}" alt="组合权益曲线" />`;
+  }
+
+  document.getElementById("portfolioContent").innerHTML = regimeHtml + portHtml + topHtml + chartHtml;
+}
+
 async function genStrategyChart() {
   if (!currentTicker) return;
   const tab = document.getElementById("tab-chart-strategy");
@@ -481,6 +630,189 @@ async function patternSearch() {
 
 document.getElementById("tickerInput").addEventListener("keydown", e => { if(e.key==="Enter") analyze() });
 analyze();
+
+// ═══════════════════════════════════════════
+// 实时报价 & 市场快照
+// ═══════════════════════════════════════════
+
+async function loadQuote(ticker) {
+  try {
+    const res = await fetch(`/api/quote/${ticker}`);
+    const q = await res.json();
+    if (q.error) return;
+    const up = q.change_pct >= 0;
+    document.getElementById("quoteBar").innerHTML = `
+      <div style="font-weight:700;min-width:60px;color:#0984e3">${q.ticker}</div>
+      <div style="font-size:12px;color:#666;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${q.name}</div>
+      <div class="quote-price" style="color:${up?'#ec2c2c':'#19a15f'}">${q.price}</div>
+      <div class="quote-change ${up?'up':'down'}">${up?'+':''}${q.change} (${up?'+':''}${q.change_pct}%)</div>
+      <div class="quote-info">
+        <span>开 ${q.open||'--'}</span><span>高 ${q.day_high||'--'}</span><span>低 ${q.day_low||'--'}</span>
+        <span>昨收 ${q.prev_close}</span><span>量 ${(q.volume/1e6).toFixed(1)}M</span>
+      </div>
+      <div class="quote-info" style="margin-left:auto">
+        <span>PE ${q.pe_ratio||'--'}</span><span>市值 ${q.market_cap?(q.market_cap/1e12).toFixed(2)+'T':'--'}</span>
+        <span style="color:${q.market_state==='REGULAR'?'#19a15f':'#999'}">${q.market_state==='REGULAR'?'交易中':'已收盘'}</span>
+      </div>
+    `;
+  } catch(e) { document.getElementById("quoteBar").innerHTML = '<div style="color:#aaa;font-size:13px">报价加载失败</div>'; }
+}
+
+async function loadMarketSnapshot() {
+  try {
+    const res = await fetch("/api/market_snapshot");
+    const data = await res.json();
+    if (data.error) return;
+    
+    document.getElementById("marketTime").textContent = data.timestamp.slice(11,16);
+    
+    let html = "";
+    for (const [k, v] of Object.entries(data.indices)) {
+      const up = v.change_pct >= 0;
+      html += `<div class="idx-row"><span class="idx-name">${v.name}</span><span class="${up?'idx-up':'idx-down'}">${v.price} ${up?'+':''}${v.change_pct}%</span></div>`;
+    }
+    if (data.sectors && data.sectors.length) {
+      html += '<div style="grid-column:1/-1;margin-top:6px;padding-top:6px;border-top:1px solid #eee;font-size:10px;color:#999;font-weight:600">板块 ETF</div>';
+      const sorted = data.sectors.sort((a,b) => b.change_pct - a.change_pct);
+      sorted.forEach(s => {
+        const up = s.change_pct >= 0;
+        html += `<div class="idx-row"><span class="idx-name">${s.name}</span><span class="${up?'idx-up':'idx-down'}">${up?'+':''}${s.change_pct}%</span></div>`;
+      });
+    }
+    document.getElementById("marketContent").innerHTML = html;
+  } catch(e) { document.getElementById("marketContent").innerHTML = '<div style="color:#aaa">加载失败</div>'; }
+}
+
+// ═══════════════════════════════════════════
+// 日内分时图 (Canvas 绘制)
+// ═══════════════════════════════════════════
+
+let intradayData = null;
+let currentIntraInterval = "5m";
+
+async function loadIntraday(interval) {
+  if (!currentTicker) return;
+  currentIntraInterval = interval;
+  
+  // 切换按钮状态
+  document.querySelectorAll(".intraday-controls button").forEach(b => {
+    b.classList.toggle("active", b.dataset.int === interval);
+  });
+  
+  document.getElementById("intradayStatus").textContent = "加载中...";
+  
+  try {
+    const res = await fetch(`/api/intraday/${currentTicker}?interval=${interval}&period=1d`);
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById("intradayArea").innerHTML = `<div class="intraday-chart">错误: ${data.error}</div>`;
+      return;
+    }
+    intradayData = data;
+    document.getElementById("intradayStatus").textContent = `${data.data_count}个数据点`;
+    drawIntraday(data);
+  } catch(e) {
+    document.getElementById("intradayArea").innerHTML = `<div class="intraday-chart">加载失败: ${e.message}</div>`;
+  }
+}
+
+function drawIntraday(data) {
+  const area = document.getElementById("intradayArea");
+  const w = area.clientWidth || 700;
+  const h = 380;
+  const pad = { top: 20, right: 60, bottom: 40, left: 60 };
+  
+  // 计算价格范围
+  const prices = data.data.map(d => d.close);
+  const highs = data.data.map(d => d.high);
+  const lows = data.data.map(d => d.low);
+  const vols = data.data.map(d => d.volume);
+  const allP = [...prices, ...highs, ...lows];
+  const pMin = Math.min(...allP);
+  const pMax = Math.max(...allP);
+  const pRange = pMax - pMin || 1;
+  const vMax = Math.max(...vols) || 1;
+  
+  const plotH = h - pad.top - pad.bottom - 80; // 留80给成交量
+  const volH = 60;
+  
+  const xScale = (i) => pad.left + (i / (prices.length - 1)) * (w - pad.left - pad.right);
+  const yScale = (p) => pad.top + plotH - ((p - pMin) / pRange) * plotH;
+  const vScale = (v) => (v / vMax) * volH;
+  
+  // 确定颜色
+  const prevClose = data.prev_close || prices[0];
+  const upColor = "#ec2c2c";
+  const downColor = "#19a15f";
+  const lineColor = data.change_pct >= 0 ? upColor : downColor;
+  
+  let svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="background:#fff;border-radius:6px">`;
+  
+  // 网格线
+  for (let i = 0; i <= 5; i++) {
+    const y = pad.top + (plotH / 5) * i;
+    const price = pMax - (pRange / 5) * i;
+    svg += `<line x1="${pad.left}" y1="${y}" x2="${w-pad.right}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>`;
+    svg += `<text x="${pad.left-5}" y="${y+4}" text-anchor="end" font-size="11" fill="#999">${price.toFixed(2)}</text>`;
+  }
+  
+  // 昨收线
+  const yPrev = yScale(prevClose);
+  svg += `<line x1="${pad.left}" y1="${yPrev}" x2="${w-pad.right}" y2="${yPrev}" stroke="#999" stroke-width="1" stroke-dasharray="5,5"/>`;
+  svg += `<text x="${w-pad.right+5}" y="${yPrev+4}" font-size="10" fill="#999">昨收</text>`;
+  
+  // 价格线 + 填充
+  let pathD = "";
+  let fillD = "";
+  prices.forEach((p, i) => {
+    const x = xScale(i), y = yScale(p);
+    pathD += (i === 0 ? "M" : "L") + `${x},${y} `;
+    fillD += (i === 0 ? "M" : "L") + `${x},${y} `;
+  });
+  // 填充区域
+  fillD += `L${xScale(prices.length-1)},${yPrev} L${pad.left},${yPrev} Z`;
+  svg += `<path d="${fillD}" fill="${lineColor}" fill-opacity="0.1"/>`;
+  svg += `<path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2"/>`;
+  
+  // 数据点 (每5个标一个)
+  prices.forEach((p, i) => {
+    if (i % 5 === 0 || i === prices.length - 1) {
+      const x = xScale(i), y = yScale(p);
+      svg += `<circle cx="${x}" cy="${y}" r="3" fill="${lineColor}"/>`;
+    }
+  });
+  
+  // X轴标签 (时间)
+  const step = Math.max(1, Math.floor(prices.length / 6));
+  for (let i = 0; i < prices.length; i += step) {
+    const x = xScale(i);
+    const timeStr = data.data[i].datetime.slice(11, 16);
+    svg += `<text x="${x}" y="${pad.top+plotH+18}" text-anchor="middle" font-size="10" fill="#999">${timeStr}</text>`;
+  }
+  
+  // 成交量柱
+  const volTop = pad.top + plotH + 25;
+  vols.forEach((v, i) => {
+    const x = xScale(i);
+    const barW = Math.max(1, (w - pad.left - pad.right) / prices.length * 0.8);
+    const hBar = vScale(v);
+    const isUp = i > 0 ? prices[i] >= prices[i-1] : prices[i] >= prevClose;
+    const vColor = isUp ? upColor : downColor;
+    svg += `<rect x="${x - barW/2}" y="${volTop + volH - hBar}" width="${barW}" height="${Math.max(1, hBar)}" fill="${vColor}" fill-opacity="0.5"/>`;
+  });
+  
+  // 成交量标签
+  svg += `<text x="${pad.left}" y="${volTop-2}" font-size="9" fill="#aaa">成交量</text>`;
+  
+  // 图例
+  const up = data.change_pct >= 0;
+  svg += `<text x="${w-pad.right}" y="15" text-anchor="end" font-size="14" font-weight="bold" fill="${lineColor}">${data.current_price}</text>`;
+  svg += `<text x="${w-pad.right}" y="30" text-anchor="end" font-size="11" fill="${lineColor}">${up?'+':''}${data.change} (${up?'+':''}${data.change_pct}%)</text>`;
+  svg += `<text x="${pad.left}" y="15" font-size="11" fill="#666">${data.ticker} · ${data.interval} · ${data.data_start?.slice(5)||''} ~ ${data.data_end?.slice(5)||''}</text>`;
+  
+  svg += "</svg>";
+  area.innerHTML = svg;
+}
 </script>
 </body>
 </html>

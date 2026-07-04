@@ -97,6 +97,35 @@ def analyze(ticker: str, period: str = "1y", strategy: str | None = None, mode: 
             sig_text = "买入" if info['signal'] > 0 else "卖出"
             print(f"       [{info['category']}] {info['name']}: {sig_text}")
 
+    print("\n[4.5/5] 策略组合分析...")
+    from src.strategy_portfolio import analyze_portfolio, detect_market_regime, plot_portfolio_equity
+    regime = detect_market_regime(df)
+    print(f"\n  🌤 市场状态: {regime.name} (置信度 {regime.score:.0f})")
+    print(f"     推荐策略类别: {regime.category}")
+    print(f"     {regime.description}")
+
+    port_summary = analyze_portfolio(df)
+    print(f"\n  📊 组合方式对比 (vs 买入持有 {port_summary['buy_hold']['total_return']:.1f}%):")
+    print(f"    {'组合方式':<18s} {'总收益':>8s} {'夏普':>6s} {'最大回撤':>8s} {'胜率':>6s} {'交易':>6s}")
+    method_names = {
+        "equal_weight_top5": "等权 Top5",
+        "sharpe_weight_top5": "夏普加权 Top5",
+        "regime_driven": "状态驱动",
+        "dynamic_vol_target": "动态波动率",
+    }
+    for method, res in port_summary.items():
+        if method in ["buy_hold", "top_strategies", "regime_info"]:
+            continue
+        print(f"    {method_names.get(method, method):<18s} {res['total_return']:>7.1f}% {res['sharpe_ratio']:>6.2f} {res['max_drawdown']:>7.1f}% {res['win_rate']:>5.0f}% {res['total_trades']:>5d}")
+
+    from src.strategies import backtest_all, rank_strategies
+    from src.strategy_portfolio import backtest_portfolio
+    ranked = rank_strategies(backtest_all(df), "sharpe_ratio")
+    top5 = [sid for sid, _, _ in ranked[:5]]
+    port_result = backtest_portfolio(df, top5)
+    portfolio_chart = plot_portfolio_equity(df, port_result, ticker, "等权Top5组合")
+    print(f"\n  组合权益图: {portfolio_chart}")
+
     print("\n[5/5] 生成图表...")
     chart_path = plot_kline_trend(df, ticker, analysis, sig, mode=mode)
     print(f"  图表: {chart_path}")

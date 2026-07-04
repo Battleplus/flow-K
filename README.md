@@ -79,7 +79,31 @@ The system now treats every indicator "line" as a **factor** and combines multip
 - Strategy ranking by Sharpe ratio, return, win rate, max drawdown, profit factor
 - **Multi-strategy consensus** aggregates all 20 strategies into a single score
 
+## Strategy Portfolio (NEW)
+
+Combines multiple strategies into a portfolio and adapts to market regimes:
+
+- **Market Regime Detection**: 强趋势上涨 / 强趋势下跌 / 震荡市 / 顶部反转 / 底部反转
+- **Portfolio Methods**:
+  - Equal-weight top-5 strategies
+  - Sharpe-weighted top-5 strategies
+  - Regime-driven strategy selection
+  - Dynamic volatility targeting
+- **Portfolio backtest** with equity curve vs buy-and-hold benchmark
+- **Position sizing**: Kelly ratio, volatility targeting, max drawdown controls
+
 Example CLI output:
+
+```bash
+$ python src/analyzer.py META --period 6mo
+
+[4.5/5] 策略组合分析...
+  🌤 市场状态: 强趋势下跌 (置信度 100)
+  📊 组合方式对比 (vs 买入持有 -12.8%):
+    等权 Top5          总收益 14.1%  夏普 1.62  最大回撤 -9.0%  胜率 67%  交易6
+    夏普加权 Top5        总收益 13.5%  夏普 1.58  最大回撤 -7.8%  胜率 67%  交易6
+    动态波动率            总收益 11.3%  夏普 1.62  最大回撤 -7.3%  胜率 67%  交易6
+```
 
 ```bash
 $ python src/analyzer.py AAPL --period 6mo

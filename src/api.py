@@ -2,6 +2,9 @@
 
 from flask import Flask, jsonify, request, send_from_directory, send_file
 import sys
+import time
+import numpy as np
+import pandas as pd
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -221,20 +224,17 @@ def api_portfolio(ticker):
     """
     period = request.args.get("period", "1y")
     try:
-        from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity
-        from src.strategies import backtest_all, rank_strategies, backtest_strategy
+        from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
+        from src.strategies import backtest_all, rank_strategies
 
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
 
         summary = analyze_portfolio(df)
 
-        # 生成最佳组合的权益曲线图 (选等权组合作为展示)
+        # 用等权 Top5 组合生成权益曲线图
         ranked = rank_strategies(backtest_all(df), "sharpe_ratio")
         top5 = [sid for sid, _, _ in ranked[:5]]
-        r = backtest_strategy(df, "portfolio") if False else backtest_strategy(df, top5[0])
-        # 用等权组合重新回测
-        from src.strategy_portfolio import backtest_portfolio
         portfolio_result = backtest_portfolio(df, top5)
         chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
 
@@ -416,6 +416,251 @@ def api_pattern_search(ticker):
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
+# ═══════════════════════════════════════════════════════════════
+# 天级数据 API
+# ═══════════════════════════════════════════════════════════════
+
+@app.route("/api/daily/<ticker>")
+def api_daily(ticker):
+    """
+    获取天级 K 线数据 (JSON 格式)
+    参数:
+      period: 时间范围 (1y/6mo/3mo/1mo/5y/max)
+      limit:  返回最近 N 条 (可选，默认全部)
+      fields: 返回字段，逗号分隔 (open,high,low,close,volume,ma5,ma10...)
+              不传则返回全部可用字段
+    """
+    period = request.args.get("period", "1y")
+    limit = request.args.get("limit", None)
+    fields = request.args.get("fields", None)
+
+    try:
+        df = fetch_data(ticker, period=period)
+        df = add_all_factors(df)
+
+        if limit:
+            limit = int(limit)
+            df = df.iloc[-limit:]
+
+        # 字段过滤
+        if fields:
+            wanted = [f.strip() for f in fields.split(",")]
+            available = [f for f in wanted if f in df.columns]
+            df = df[["Date"] + available] if available else df
+
+        # 构建 JSON
+        records = []
+        for _, row in df.iterrows():
+            rec = {"date": str(row["Date"])[:10]}
+            for col in df.columns:
+                if col == "Date":
+                    continue
+                val = row[col]
+                if pd.isna(val):
+                    rec[col] = None
+                elif isinstance(val, (float, np.floating)):
+                    rec[col] = round(float(val), 4)
+                elif isinstance(val, (int, np.integer)):
+                    rec[col] = int(val)
+                else:
+                    rec[col] = val
+            records.append(rec)
+
+        return jsonify({
+            "ticker": ticker.upper(),
+            "period": period,
+            "total_records": len(df),
+            "returned_records": len(records),
+            "available_fields": [c for c in df.columns if c != "Date"],
+            "data": records,
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/daily_summary/<ticker>")
+def api_daily_summary(ticker):
+    """
+    单日综合摘要 — 因子值 + 信号 + 策略共识
+    参数:
+      period: 数据周期 (默认1y，用于因子计算历史)
+      date:   指定日期 (可选，默认最新交易日)
+    """
+    period = request.args.get("period", "1y")
+    date = request.args.get("date", None)
+
+    try:
+        from src.strategies import get_latest_consensus, STRATEGIES, backtest_all, rank_strategies
+        from src.factors import FACTOR_META
+
+        df = fetch_data(ticker, period=period)
+        df = add_all_factors(df)
+        df_sig = detect_all(df)
+
+        # 指定日期或最新
+        if date:
+            target = pd.Timestamp(date).date()
+            matches = df[df["Date"] == target]
+            if len(matches) == 0:
+                return jsonify({"error": f"日期 {date} 不在数据范围内"}), 400
+            row_idx = len(df) - len(df[df["Date"] > target]) - 1
+            target_date = target
+        else:
+            row_idx = len(df) - 1
+            target_date = df["Date"].iloc[-1]
+
+        row = df.iloc[row_idx]
+
+        # 因子值
+        factors = {}
+        for key, (category, desc, _, _) in FACTOR_META.items():
+            if key in row.index and not pd.isna(row[key]):
+                factors[key] = {
+                    "category": category,
+                    "description": desc,
+                    "value": round(float(row[key]), 4),
+                }
+
+        # 信号
+        sig = signal_summary(df_sig)
+        active = get_active_signals(df_sig, recent_days=5)
+
+        # 策略共识
+        consensus = get_latest_consensus(df)
+
+        # 当日 K 线
+        ohlcv = {
+            "open": round(float(row["Open"]), 2),
+            "high": round(float(row["High"]), 2),
+            "low": round(float(row["Low"]), 2),
+            "close": round(float(row["Close"]), 2),
+            "volume": int(row["Volume"]),
+        }
+
+        # 涨跌
+        if row_idx > 0:
+            prev_close = float(df["Close"].iloc[row_idx - 1])
+            chg = ohlcv["close"] - prev_close
+            chg_pct = (chg / prev_close) * 100
+        else:
+            chg = 0
+            chg_pct = 0
+
+        return jsonify({
+            "ticker": ticker.upper(),
+            "date": str(target_date)[:10],
+            "ohlcv": ohlcv,
+            "change": round(chg, 2),
+            "change_pct": round(chg_pct, 2),
+            "factor_count": len(factors),
+            "factors": factors,
+            "signals": {
+                "score": sig["score"],
+                "verdict": sig["verdict"],
+                "bullish_count": sig["bullish_count"],
+                "bearish_count": sig["bearish_count"],
+                "neutral_count": sig["neutral_count"],
+                "active": active,
+            },
+            "strategy_consensus": consensus,
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/market_snapshot")
+def api_market_snapshot():
+    """大盘快照 — 主要指数 + 板块 ETF 行情"""
+    try:
+        from src.data_loader import fetch_market_indices
+        snap = fetch_market_indices()
+        return jsonify(snap)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+# ═══════════════════════════════════════════════════════════════
+# 日内实时数据 API
+# ═══════════════════════════════════════════════════════════════
+
+@app.route("/api/intraday/<ticker>")
+def api_intraday(ticker):
+    """
+    获取日内分时数据
+    参数:
+      interval: K线粒度 (1m/2m/5m/15m/30m/60m/1h), 默认5m
+      period:   时间范围 (1d/5d/1mo), 默认1d
+    """
+    interval = request.args.get("interval", "5m")
+    period = request.args.get("period", "1d")
+
+    try:
+        from src.data_loader import fetch_intraday
+        result = fetch_intraday(ticker, period=period, interval=interval)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/quote/<ticker>")
+def api_quote(ticker):
+    """获取实时报价快照"""
+    try:
+        from src.data_loader import fetch_quote
+        result = fetch_quote(ticker)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/quotes")
+def api_quotes_batch():
+    """
+    批量获取实时报价
+    参数:
+      tickers: 逗号分隔的股票代码 (如 AAPL,MSFT,GOOGL)
+    """
+    tickers_str = request.args.get("tickers", "")
+    if not tickers_str:
+        return jsonify({"error": "请提供 tickers 参数"}), 400
+
+    tickers = [t.strip().upper() for t in tickers_str.split(",") if t.strip()]
+    if not tickers:
+        return jsonify({"error": "无有效股票代码"}), 400
+    if len(tickers) > 20:
+        return jsonify({"error": "最多支持20只股票同时查询"}), 400
+
+    try:
+        from src.data_loader import fetch_quote
+        results = {}
+        for t in tickers:
+            try:
+                results[t] = fetch_quote(t)
+            except Exception as err:
+                results[t] = {"error": str(err)}
+        return jsonify({
+            "count": len(tickers),
+            "quotes": results,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+# ── 原有接口 ──
+
 @app.route("/api/factors/<ticker>")
 def api_factors(ticker):
     period = request.args.get("period", "1y")
@@ -445,8 +690,20 @@ def api_factors(ticker):
 
 
 if __name__ == "__main__":
-    print("Starting FLOW AI Trading Dashboard...")
-    print("  Modes: single / multi")
-    print("  New: /api/strategies /api/backtest /api/consensus")
-    print("Open http://localhost:5000")
+    print("=" * 60)
+    print("  FLOW AI Trading Dashboard")
+    print("=" * 60)
+    print("  天级数据:   /api/daily/<ticker>")
+    print("               /api/daily_summary/<ticker>")
+    print("               /api/market_snapshot")
+    print("  日内实时:   /api/quote/<ticker>")
+    print("               /api/quotes?tickers=AAPL,MSFT")
+    print("               /api/intraday/<ticker>?interval=5m")
+    print("  策略/组合:  /api/backtest/<ticker>")
+    print("               /api/consensus/<ticker>")
+    print("               /api/portfolio/<ticker>")
+    print("  分析/因子:  /api/analyze/<ticker>")
+    print("               /api/factors/<ticker>")
+    print("=" * 60)
+    print("  Open http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)

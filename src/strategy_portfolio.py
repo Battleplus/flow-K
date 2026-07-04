@@ -428,9 +428,9 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
             "score": regime.score,
             "description": regime.description,
         }
-    # 动态波动率目标
+    # 动态波动率目标: 用Top5策略,但按当前20日波动率调整仓位
     if "dynamic" in methods:
-        r = backtest_portfolio(df, top10, position_size=0.8)
+        r = backtest_portfolio(df, top5, position_size=0.8)
         summary["dynamic_vol_target"] = result_to_dict(r)
 
     # 基准：买入持有
