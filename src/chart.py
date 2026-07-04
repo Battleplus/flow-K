@@ -1,16 +1,17 @@
-"""图表模块 - mplfinance K线 + 趋势线 + 斜率标注 + 信号标记"""
+"""图表模块 - mplfinance K线 + 全量趋势线/曲线/信号标注
+新增: VWAP, Donchian通道, 线性回归通道, EMA, 更多趋势线
+"""
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import mplfinance as mpf
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import matplotlib.font_manager as _fm
 import warnings
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import mplfinance as mpf
 
-# 抑制字体警告
 warnings.filterwarnings("ignore", message="Glyph.*missing from font")
 
 # 强制注册微软雅黑字体
@@ -19,326 +20,430 @@ _fm.fontManager.addfont(_FONT_PATH)
 _cn_font = _fm.FontProperties(fname=_FONT_PATH)
 _cn_font_name = _cn_font.get_name()
 
-# 全局字体设置
 matplotlib.rcParams["font.family"] = "sans-serif"
 matplotlib.rcParams["font.sans-serif"] = [_cn_font_name, "Microsoft YaHei", "SimHei", "DejaVu Sans"]
 matplotlib.rcParams["axes.unicode_minus"] = False
-
-# 清除字体缓存以确保新字体生效
-try:
-    _fm.fontManager._load_fonts(try_read_cache=False)
-except AttributeError:
-    pass  # 新版 matplotlib 不需要手动重建缓存
 
 ROOT = Path(__file__).resolve().parent.parent
 CHART_DIR = ROOT / "outputs" / "charts"
 CHART_DIR.mkdir(parents=True, exist_ok=True)
 
-# 均线颜色方案
-MA_COLORS = {
-    "ma5": "#ff9800",
-    "ma10": "#2196f3",
-    "ma20": "#9c27b0",
-    "ma60": "#4caf50",
-}
+MA_COLORS = {"ma5": "#ff9800", "ma10": "#2196f3", "ma20": "#9c27b0", "ma60": "#4caf50"}
 MA_LINEWIDTH = {"ma5": 0.8, "ma10": 0.8, "ma20": 1.2, "ma60": 1.5}
-
-# 方向颜色
-BULL_COLOR = "#ec2c2c"   # 红色 (A股习惯: 涨红)
-BEAR_COLOR = "#19a15f"   # 绿色 (A股习惯: 跌绿)
-TL_UP_COLOR = "#ec2c2c"
-TL_DN_COLOR = "#19a15f"
+BULL_COLOR = "#ec2c2c"
+BEAR_COLOR = "#19a15f"
+TL_COLORS = ["#e53935", "#ff7043", "#ff9800", "#fdd835", "#43a047", "#1e88e5", "#5e35b1", "#8e24aa"]
 
 
-def _fit_trendline_pivots(df_plot, window=5):
-    """从 pivot 点拟合趋势线，返回用于绘制的数据"""
+# ═══════════════════════════════════════════════════════════════
+# 趋势线拟合 (多窗口, 低阈值)
+# ═══════════════════════════════════════════════════════════════
+
+def _fit_trendline_pivots_multi(df_plot, windows=(3, 5, 8, 13)):
+    """多窗口拟合多条趋势线, R² 阈值降低到 0.35"""
     n = len(df_plot)
-    if n < window * 2 + 1:
-        return {}, {}
-
-    # 找 pivot lows (上升趋势线)
     lows = df_plot["Low"].values
-    low_pivots = []
-    for i in range(window, n - window):
-        if lows[i] == np.min(lows[i - window : i + window + 1]):
-            low_pivots.append(i)
-
-    # 找 pivot highs (下降趋势线)
     highs = df_plot["High"].values
-    high_pivots = []
-    for i in range(window, n - window):
-        if highs[i] == np.max(highs[i - window : i + window + 1]):
-            high_pivots.append(i)
+    results = {"uptrends": [], "downtrends": []}
+    from scipy import stats as sp_stats
 
-    result = {}
+    for w in windows:
+        if n < w * 4:
+            continue
+        # Pivot Lows
+        low_pivots = [i for i in range(w, n - w)
+                      if lows[i] == np.min(lows[i - w : i + w + 1])]
+        if len(low_pivots) >= 3:
+            for num in [min(3, len(low_pivots)), min(4, len(low_pivots)), min(5, len(low_pivots))]:
+                if num < 3:
+                    continue
+                recent = low_pivots[-num:]
+                xv = np.array(recent, dtype=float)
+                yv = lows[recent]
+                slope, intercept, r_value, _, _ = sp_stats.linregress(xv, yv)
+                r2 = r_value ** 2
+                if r2 > 0.35:
+                    x_line = np.array([recent[0], n - 1])
+                    y_line = slope * x_line + intercept
+                    results["uptrends"].append({
+                        "x": x_line, "y": y_line,
+                        "slope": slope, "r2": r2,
+                        "pivots": recent, "window": w,
+                    })
+                    break
 
-    # 上升趋势线: 用最近几个 pivot lows 拟合
-    if len(low_pivots) >= 3:
-        recent = low_pivots[-min(5, len(low_pivots)):]
-        x_vals = np.array(recent, dtype=float)
-        y_vals = lows[recent]
-        from scipy import stats as sp_stats
-        slope, intercept, r_value, _, _ = sp_stats.linregress(x_vals, y_vals)
-        if r_value ** 2 > 0.4:
-            x_line = np.array([recent[0], recent[-1] + int(n * 0.1)])
-            y_line = slope * x_line + intercept
-            result["uptrend"] = {
-                "x": x_line, "y": y_line,
-                "slope": slope, "r2": r_value ** 2,
-            }
+        # Pivot Highs
+        high_pivots = [i for i in range(w, n - w)
+                       if highs[i] == np.max(highs[i - w : i + w + 1])]
+        if len(high_pivots) >= 3:
+            for num in [min(3, len(high_pivots)), min(4, len(high_pivots)), min(5, len(high_pivots))]:
+                if num < 3:
+                    continue
+                recent = high_pivots[-num:]
+                xv = np.array(recent, dtype=float)
+                yv = highs[recent]
+                slope, intercept, r_value, _, _ = sp_stats.linregress(xv, yv)
+                r2 = r_value ** 2
+                if r2 > 0.35:
+                    x_line = np.array([recent[0], n - 1])
+                    y_line = slope * x_line + intercept
+                    results["downtrends"].append({
+                        "x": x_line, "y": y_line,
+                        "slope": slope, "r2": r2,
+                        "pivots": recent, "window": w,
+                    })
+                    break
 
-    # 下降趋势线
-    if len(high_pivots) >= 3:
-        recent = high_pivots[-min(5, len(high_pivots)):]
-        x_vals = np.array(recent, dtype=float)
-        y_vals = highs[recent]
-        from scipy import stats as sp_stats
-        slope, intercept, r_value, _, _ = sp_stats.linregress(x_vals, y_vals)
-        if r_value ** 2 > 0.4:
-            x_line = np.array([recent[0], recent[-1] + int(n * 0.1)])
-            y_line = slope * x_line + intercept
-            result["downtrend"] = {
-                "x": x_line, "y": y_line,
-                "slope": slope, "r2": r_value ** 2,
-            }
-
-    # 通道: 基于上升趋势线做平行上轨
-    if "uptrend" in result:
-        ul = result["uptrend"]
-        # 通道宽度 = 价格到趋势线最大距离的 1.2 倍
-        max_dist = 0
-        for i in range(low_pivots[-1], n):
-            tl_y = ul["slope"] * i + (ul["y"][0] - ul["slope"] * ul["x"][0])
-            dist = df_plot["High"].values[i] - tl_y
-            max_dist = max(max_dist, dist)
-        if max_dist > 0:
-            upper_slope = ul["slope"]
-            upper_intercept = ul["y"][0] - ul["slope"] * ul["x"][0] + max_dist * 1.1
-            x_ch = np.array([ul["x"][0], min(ul["x"][-1], n - 1)])
-            y_ch_upper = upper_slope * x_ch + upper_intercept
-            y_ch_lower = ul["slope"] * x_ch + (ul["y"][0] - ul["slope"] * ul["x"][0])
-            result["channel_upper"] = {"x": x_ch, "y": y_ch_upper}
-            result["channel_lower"] = {"x": x_ch, "y": y_ch_lower}
-
-    return result
+    results["uptrends"] = _deduplicate(results["uptrends"])
+    results["downtrends"] = _deduplicate(results["downtrends"])
+    return results
 
 
-def plot_kline_trend(
-    df: pd.DataFrame,
-    ticker: str,
-    analysis: dict,
-    signals: dict = None,
-    save: bool = True,
-) -> str:
-    """绘制专业 K 线图 + 趋势线 + 均线 + 信号标注"""
+def _deduplicate(lines: list, slope_thresh=0.00005) -> list:
+    if not lines:
+        return []
+    kept = []
+    for line in sorted(lines, key=lambda x: x["r2"], reverse=True):
+        if all(abs(line["slope"] - k["slope"]) > slope_thresh for k in kept):
+            kept.append(line)
+        if len(kept) >= 4:
+            break
+    return kept
+
+
+# ═══════════════════════════════════════════════════════════════
+# 支撑压力位 (多级别)
+# ═══════════════════════════════════════════════════════════════
+
+def _find_support_resistance(df_plot):
+    """返回 (support_levels, resistance_levels) 各3个"""
+    n = len(df_plot)
+    lows = df_plot["Low"].values
+    highs = df_plot["High"].values
+    curr = df_plot["Close"].iloc[-1]
+    atr = float(np.mean(df_plot["High"].iloc[-20:].values - df_plot["Low"].iloc[-20:].values)) if n >= 20 else curr * 0.02
+
+    def cluster(prices):
+        if not prices:
+            return []
+        s = sorted(prices)
+        out = [[s[0]]]
+        for p in s[1:]:
+            if p - out[-1][-1] < atr * 0.4:
+                out[-1].append(p)
+            else:
+                out.append([p])
+        return [float(np.mean(c)) for c in out]
+
+    # 局部低点聚类 → 支撑
+    sup_candidates = []
+    w = 5
+    for i in range(w, n - w):
+        if lows[i] == np.min(lows[i - w : i + w + 1]):
+            sup_candidates.append(lows[i])
+    sup_levels = [s for s in cluster(sup_candidates) if s < curr][-3:]
+
+    # 局部高点聚类 → 压力
+    res_candidates = []
+    for i in range(w, n - w):
+        if highs[i] == np.max(highs[i - w : i + w + 1]):
+            res_candidates.append(highs[i])
+    res_levels = [r for r in cluster(res_candidates) if r > curr][:3]
+
+    return sup_levels, res_levels
+
+
+# ═══════════════════════════════════════════════════════════════
+# 主绘图函数
+# ═══════════════════════════════════════════════════════════════
+
+def plot_kline_trend(df, ticker, analysis=None, signals=None, save=True):
+    """绘制 K 线 + 全量线条 + 信号"""
 
     df_plot = df.copy()
     df_plot["Date"] = pd.to_datetime(df_plot["Date"])
     df_plot = df_plot.set_index("Date")
-
-    # 拟合趋势线
-    trend_lines = _fit_trendline_pivots(df_plot, window=5)
-
-    # 构建均线 addplot
-    apds = []
-    for col in ["ma5", "ma10", "ma20", "ma60"]:
-        if col in df_plot.columns:
-            apds.append(
-                mpf.make_addplot(
-                    df_plot[col],
-                    color=MA_COLORS[col],
-                    width=MA_LINEWIDTH[col],
-                    label=col.upper(),
-                )
-            )
-
-    # 自定义风格 (A股习惯: 红涨绿跌)
-    mc = mpf.make_marketcolors(
-        up="#ec2c2c", down="#19a15f",
-        edge="inherit", wick="inherit",
-        volume="inherit",
-    )
-    s = mpf.make_mpf_style(
-        marketcolors=mc,
-        gridstyle=":", gridcolor="#e0e0e0",
-        facecolor="#fafbfc",
-        figcolor="#ffffff",
-    )
-
-    # 标题
-    title_parts = [ticker]
-    if analysis:
-        title_parts.append(f"趋势: {analysis.get('overall_trend', '')}")
-    if signals:
-        title_parts.append(f"信号: {signals.get('verdict', '')} (评分{signals.get('score', 0)})")
-    title = " | ".join(title_parts)
-
-    fig, axes = mpf.plot(
-        df_plot,
-        type="candle",
-        style=s,
-        addplot=apds,
-        volume=True,
-        figsize=(18, 10),
-        title="",  # 手动设置标题以使用中文字体
-        returnfig=True,
-        warn_too_much_data=len(df_plot) + 1,
-    )
-
-    ax_main = axes[0]
-    ax_vol = axes[2]
     n = len(df_plot)
 
-    # 手动设置主标题 (使用中文字体)
-    ax_main.set_title(
-        title,
-        fontsize=14, fontweight="bold", fontproperties=_cn_font, pad=10
-    )
+    # ── 计算额外指标 (如果还没有) ──
+    close = df_plot["Close"].values
+    high = df_plot["High"].values
+    low = df_plot["Low"].values
+    volume = df_plot["Volume"].values
 
-    # ── 绘制趋势线 ──
-    # 上升趋势线 (红色虚线)
-    if "uptrend" in trend_lines:
-        tl = trend_lines["uptrend"]
-        ax_main.plot(tl["x"], tl["y"], color=TL_UP_COLOR, linestyle="--", linewidth=1.5, alpha=0.8)
-        mid_idx = int((tl["x"][0] + tl["x"][-1]) / 2)
-        mid_y = tl["slope"] * mid_idx + (tl["y"][0] - tl["slope"] * tl["x"][0])
-        ax_main.annotate(
-            f"上升趋势线 R²={tl['r2']:.2f}",
-            (mid_idx, mid_y),
-            fontsize=7, color=TL_UP_COLOR, alpha=0.8,
-            fontproperties=_cn_font,
-            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1),
-        )
+    # VWAP
+    if "vwap" not in df_plot.columns:
+        cum_vol = np.cumsum(volume)
+        cum_vol_price = np.cumsum(volume * close)
+        df_plot["vwap"] = cum_vol_price / np.where(cum_vol == 0, 1, cum_vol)
 
-    # 下降趋势线 (绿色虚线)
-    if "downtrend" in trend_lines:
-        tl = trend_lines["downtrend"]
-        ax_main.plot(tl["x"], tl["y"], color=TL_DN_COLOR, linestyle="--", linewidth=1.5, alpha=0.8)
-        mid_idx = int((tl["x"][0] + tl["x"][-1]) / 2)
-        mid_y = tl["slope"] * mid_idx + (tl["y"][0] - tl["slope"] * tl["x"][0])
-        ax_main.annotate(
-            f"下降趋势线 R²={tl['r2']:.2f}",
-            (mid_idx, mid_y),
-            fontsize=7, color=TL_DN_COLOR, alpha=0.8,
-            fontproperties=_cn_font,
-            bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1),
-        )
+    # EMA12 / EMA26
+    if "ema12" not in df_plot.columns:
+        df_plot["ema12"] = pd.Series(close).ewm(span=12, adjust=False).mean().values
+    if "ema26" not in df_plot.columns:
+        df_plot["ema26"] = pd.Series(close).ewm(span=26, adjust=False).mean().values
 
-    # 通道线
-    if "channel_upper" in trend_lines and "channel_lower" in trend_lines:
-        cu = trend_lines["channel_upper"]
-        cl = trend_lines["channel_lower"]
-        ax_main.plot(cu["x"], cu["y"], color="#ff9800", linestyle=":", linewidth=1, alpha=0.6)
-        ax_main.plot(cl["x"], cl["y"], color="#ff9800", linestyle=":", linewidth=1, alpha=0.6)
-        ax_main.fill_between(
-            cu["x"], cl["y"], cu["y"],
-            alpha=0.05, color="#ff9800",
-        )
+    # Donchian 通道 (20日)
+    df_plot["donchian_high"] = pd.Series(high).rolling(20, min_periods=1).max().values
+    df_plot["donchian_low"] = pd.Series(low).rolling(20, min_periods=1).min().values
 
-    # ── 标注支撑/压力位 ──
-    sr = analysis.get("support_resistance", {}) if analysis else {}
-    support = sr.get("support")
-    resistance = sr.get("resistance")
-    if support:
-        ax_main.axhline(y=support, color="#4caf50", linestyle="--", linewidth=1, alpha=0.7)
-        ax_main.text(n - 1, support, f" 支撑 {support}", fontsize=9, color="#4caf50", va="bottom", fontproperties=_cn_font)
-    if resistance:
-        ax_main.axhline(y=resistance, color="#ef5350", linestyle="--", linewidth=1, alpha=0.7)
-        ax_main.text(n - 1, resistance, f" 压力 {resistance}", fontsize=9, color="#ef5350", va="top", fontproperties=_cn_font)
+    # 线性回归通道
+    x_arr = np.arange(n)
+    slope, intercept = np.polyfit(x_arr, close, 1)
+    reg_line = slope * x_arr + intercept
+    residuals = close - reg_line
+    std_res = float(np.std(residuals))
+    df_plot["lr_mid"] = reg_line
+    df_plot["lr_upper1"] = reg_line + std_res
+    df_plot["lr_lower1"] = reg_line - std_res
+    df_plot["lr_upper2"] = reg_line + 2 * std_res
+    df_plot["lr_lower2"] = reg_line - 2 * std_res
 
-    # ── 标注金叉死叉 ──
-    crosses = analysis.get("crosses", []) if analysis else []
-    for c in crosses[-5:]:
-        try:
-            cross_date = pd.to_datetime(c["date"])
-            if cross_date in df_plot.index:
-                idx = df_plot.index.get_loc(cross_date)
-                label = "▲金叉" if c["type"] == "金叉" else "▼死叉"
-                color = BULL_COLOR if c["type"] == "金叉" else BEAR_COLOR
-                price = df_plot.iloc[idx]["Low"] * 0.98
-                ax_main.annotate(
-                    label, (idx, price),
-                    fontsize=8, color=color, fontweight="bold",
-                    ha="center", va="top", fontproperties=_cn_font,
-                )
-        except Exception:
-            pass
+    # ── 趋势线 ──
+    trend_lines = _fit_trendline_pivots_multi(df_plot, windows=(3, 5, 8, 13))
 
-    # ── 标注主动信号 ──
+    # ── addplot 构建 ──
+    apds = []
+
+    # 均线
+    for col in ["ma5", "ma10", "ma20", "ma60"]:
+        if col in df_plot.columns:
+            apds.append(mpf.make_addplot(df_plot[col], color=MA_COLORS[col],
+                         width=MA_LINEWIDTH[col], type="line"))
+
+    # EMA
+    if "ema12" in df_plot.columns:
+        apds.append(mpf.make_addplot(df_plot["ema12"], color="#00bcd4",
+                     width=0.7, type="line", linestyle="-.", alpha=0.8))
+    if "ema26" in df_plot.columns:
+        apds.append(mpf.make_addplot(df_plot["ema26"], color="#795548",
+                     width=0.7, type="line", linestyle="-.", alpha=0.8))
+
+    # 布林带
+    for band, color, width, style in [
+        ("bb_upper", "#e53935", 0.6, "--"),
+        ("bb_lower", "#43a047", 0.6, "--"),
+        ("bb_mid", "#78909c", 0.5, ":"),
+    ]:
+        if band in df_plot.columns:
+            apds.append(mpf.make_addplot(df_plot[band], color=color,
+                         width=width, type="line", linestyle=style))
+
+    # VWAP
+    apds.append(mpf.make_addplot(df_plot["vwap"], color="#e91e63",
+                 width=1.0, type="line", linestyle="-"))
+
+    # Donchian 通道
+    apds.append(mpf.make_addplot(df_plot["donchian_high"], color="#ff6f00",
+                 width=0.5, type="line", linestyle=":", alpha=0.6))
+    apds.append(mpf.make_addplot(df_plot["donchian_low"], color="#ff6f00",
+                 width=0.5, type="line", linestyle=":", alpha=0.6))
+
+    # 线性回归通道
+    for band, color, alpha in [
+        ("lr_mid", "#9c27b0", 0.7),
+        ("lr_upper1", "#ce93d8", 0.4),
+        ("lr_lower1", "#ce93d8", 0.4),
+        ("lr_upper2", "#e1bee7", 0.25),
+        ("lr_lower2", "#e1bee7", 0.25),
+    ]:
+        style = "-" if band == "lr_mid" else "--"
+        apds.append(mpf.make_addplot(df_plot[band], color=color,
+                     width=0.7 if band == "lr_mid" else 0.5,
+                     type="line", linestyle=style, alpha=alpha))
+
+    # 信号散点标记
     if signals and signals.get("active"):
-        for sig in signals["active"][-8:]:  # 最多显示8个
+        bull_idx, bull_px, bear_idx, bear_px = [], [], [], []
+        for sig in signals["active"][-12:]:
             try:
-                sig_date = pd.to_datetime(sig.get("last_date", ""))
-                if sig_date in df_plot.index:
-                    idx = df_plot.index.get_loc(sig_date)
-                    direction = sig.get("direction", "neutral")
-                    if direction == "bullish":
-                        marker = "▲"
-                        color = BULL_COLOR
-                        y_offset = -0.06
-                    elif direction == "bearish":
-                        marker = "▼"
-                        color = BEAR_COLOR
-                        y_offset = 0.06
-                    else:
-                        marker = "◆"
-                        color = "#ff9800"
-                        y_offset = 0
+                sd = pd.to_datetime(sig.get("last_date", ""))
+                if sd in df_plot.index:
+                    idx = df_plot.index.get_loc(sd)
+                    d = sig.get("direction", "neutral")
+                    if d == "bullish":
+                        bull_idx.append(idx)
+                        bull_px.append(df_plot.iloc[idx]["Low"] * 0.97)
+                    elif d == "bearish":
+                        bear_idx.append(idx)
+                        bear_px.append(df_plot.iloc[idx]["High"] * 1.03)
+            except Exception:
+                pass
+        if bull_idx:
+            s = pd.Series(np.nan, index=df_plot.index)
+            for d, p in zip(bull_idx, bull_px):
+                s.iloc[d] = p
+            apds.append(mpf.make_addplot(s, type="scatter",
+                         marker="^", markersize=90, color=BULL_COLOR, alpha=0.9))
+        if bear_idx:
+            s = pd.Series(np.nan, index=df_plot.index)
+            for d, p in zip(bear_idx, bear_px):
+                s.iloc[d] = p
+            apds.append(mpf.make_addplot(s, type="scatter",
+                         marker="v", markersize=90, color=BEAR_COLOR, alpha=0.9))
 
-                    price = df_plot.iloc[idx]["Close"] * (1 + y_offset)
-                    ax_main.annotate(
-                        marker,
-                        (idx, price),
-                        fontsize=10, color=color, fontweight="bold",
-                        ha="center", va="center",
-                    )
+    # ── mplfinance 绘图 ──
+    mc = mpf.make_marketcolors(up="#ec2c2c", down="#19a15f",
+                               edge="inherit", wick="inherit", volume="inherit")
+    style = mpf.make_mpf_style(marketcolors=mc, gridstyle=":",
+                               gridcolor="#e8e8e8", facecolor="#fafbfc", figcolor="#ffffff")
+
+    title = ticker
+    if analysis:
+        title += f" | 趋势:{analysis.get('overall_trend','')}"
+    if signals:
+        title += f" | {signals.get('verdict','')}({signals.get('score',0)})"
+
+    fig, axes = mpf.plot(
+        df_plot, type="candle", style=style, addplot=apds,
+        volume=True, figsize=(22, 12), title="", returnfig=True,
+        warn_too_much_data=len(df_plot) + 1,
+    )
+    ax_main = axes[0]
+    ax_main.set_title(title, fontsize=14, fontweight="bold",
+                      fontproperties=_cn_font, pad=12)
+
+    # ── 在 matplotlib 轴上画额外线条 ──
+
+    # 多条趋势线
+    for i, tl in enumerate(trend_lines.get("uptrends", [])):
+        c = TL_COLORS[i % len(TL_COLORS)]
+        ax_main.plot(tl["x"], tl["y"], color=c, linestyle="--",
+                     linewidth=1.4, alpha=0.8)
+        mid = int((tl["x"][0] + tl["x"][-1]) / 2)
+        intercept = tl["y"][0] - tl["slope"] * tl["x"][0]
+        ax_main.annotate(f"上升{i+1} R²={tl['r2']:.2f}",
+                         (mid, tl["slope"] * mid + intercept),
+                         fontsize=7, color=c, fontproperties=_cn_font,
+                         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", pad=1))
+
+    for i, tl in enumerate(trend_lines.get("downtrends", [])):
+        c = TL_COLORS[(i + 4) % len(TL_COLORS)]
+        ax_main.plot(tl["x"], tl["y"], color=c, linestyle="--",
+                     linewidth=1.4, alpha=0.8)
+        mid = int((tl["x"][0] + tl["x"][-1]) / 2)
+        intercept = tl["y"][0] - tl["slope"] * tl["x"][0]
+        ax_main.annotate(f"下降{i+1} R²={tl['r2']:.2f}",
+                         (mid, tl["slope"] * mid + intercept),
+                         fontsize=7, color=c, fontproperties=_cn_font,
+                         bbox=dict(facecolor="white", alpha=0.5, edgecolor="none", pad=1))
+
+    # 斐波那契回撤 (全趋势都画)
+    lo_all = low[-min(n, 120):].min()
+    hi_all = high[-min(n, 120):].max()
+    diff = hi_all - lo_all
+    curr_p = close[-1]
+    for ratio in [0.236, 0.382, 0.5, 0.618, 0.786]:
+        level = lo_all + diff * ratio
+        if abs(level - curr_p) / curr_p < 0.20:
+            ax_main.axhline(y=level, color="#ab47bc", linestyle=":",
+                            linewidth=0.7, alpha=0.5)
+            ax_main.text(n - 1, level, f" Fib{int(ratio*1000)}",
+                         fontsize=6.5, color="#ab47bc", va="center",
+                         fontproperties=_cn_font, alpha=0.6)
+
+    # 多级别支撑/压力
+    sup_levels, res_levels = _find_support_resistance(df_plot)
+    for j, s in enumerate(sup_levels):
+        ax_main.axhline(y=s, color="#4caf50", linestyle="-.", linewidth=1, alpha=0.6)
+        ax_main.text(n - 1, s, f" 支撑{j+1}", fontsize=7.5, color="#2e7d32",
+                     va="bottom", fontproperties=_cn_font, alpha=0.8)
+    for j, r in enumerate(res_levels):
+        ax_main.axhline(y=r, color="#ef5350", linestyle="-.", linewidth=1, alpha=0.6)
+        ax_main.text(n - 1, r, f" 压力{j+1}", fontsize=7.5, color="#c62828",
+                     va="top", fontproperties=_cn_font, alpha=0.8)
+
+    # 来自 analysis 的关键支撑压力
+    if analysis:
+        sr = analysis.get("support_resistance", {})
+        if sr.get("support"):
+            ax_main.axhline(y=sr["support"], color="#1b5e20", linestyle="--",
+                            linewidth=1.2, alpha=0.7)
+            ax_main.text(n - 1, sr["support"], f" 关键支撑", fontsize=8,
+                         color="#1b5e20", va="bottom", fontproperties=_cn_font)
+        if sr.get("resistance"):
+            ax_main.axhline(y=sr["resistance"], color="#b71c1c", linestyle="--",
+                            linewidth=1.2, alpha=0.7)
+            ax_main.text(n - 1, sr["resistance"], f" 关键压力", fontsize=8,
+                         color="#b71c1c", va="top", fontproperties=_cn_font)
+
+    # 金叉死叉标注
+    if analysis:
+        for c in (analysis.get("crosses", []) or [])[-8:]:
+            try:
+                cd = pd.to_datetime(c["date"])
+                if cd in df_plot.index:
+                    idx = df_plot.index.get_loc(cd)
+                    is_gold = c["type"] == "金叉"
+                    lbl = "▲金叉" if is_gold else "▼死叉"
+                    col = BULL_COLOR if is_gold else BEAR_COLOR
+                    yp = df_plot.iloc[idx]["Low"] * 0.955 if is_gold else df_plot.iloc[idx]["High"] * 1.045
+                    ax_main.annotate(lbl, (idx, yp), fontsize=8, color=col,
+                                     fontweight="bold", ha="center", va="center",
+                                     fontproperties=_cn_font,
+                                     bbox=dict(facecolor="white", alpha=0.7,
+                                               edgecolor=col, pad=2))
             except Exception:
                 pass
 
     # ── 图例 ──
-    legend_lines = []
+    legend_items = []
     legend_labels = []
-    for col in ["ma5", "ma10", "ma20", "ma60"]:
+    for col, lbl in [("ma5","MA5"),("ma10","MA10"),("ma20","MA20"),("ma60","MA60")]:
         if col in df_plot.columns:
             from matplotlib.lines import Line2D
-            legend_lines.append(Line2D([0], [0], color=MA_COLORS[col], linewidth=1.5))
-            legend_labels.append(col.upper())
-    if legend_lines:
-        ax_main.legend(legend_lines, legend_labels, loc="upper left", fontsize=9, ncol=4, prop=_cn_font)
+            legend_items.append(Line2D([0],[0], color=MA_COLORS[col], linewidth=1.5))
+            legend_labels.append(lbl)
+    for lbl, color, style in [("EMA12","#00bcd4","-"),("EMA26","#795548","-"),
+                               ("VWAP","#e91e63","-"),("BB","#e53935","--"),
+                               ("Donchian","#ff6f00",":"),("LR通道","#9c27b0","-")]:
+        legend_items.append(Line2D([0],[0], color=color, linewidth=1.2, linestyle=style))
+        legend_labels.append(lbl)
 
-    # ── 斜率信息文本框 ──
-    slopes = analysis.get("slopes", {}) if analysis else {}
-    slope_text = "均线斜率:\n"
-    for name, info in slopes.items():
-        direction_symbol = "↑" if info["direction"] == "上升" else "↓" if info["direction"] == "下降" else "→"
-        slope_text += f"  {name}: {info['slope']}% {direction_symbol}  {info['direction']}\n"
+    if legend_items:
+        ax_main.legend(legend_items, legend_labels, loc="upper left",
+                       fontsize=7.5, ncol=3, prop=_cn_font, framealpha=0.9)
 
-    ax_main.text(
-        0.01, 0.97, slope_text.strip(),
-        transform=ax_main.transAxes,
-        fontsize=8, fontproperties=_cn_font,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.85, edgecolor="#ccc"),
-    )
+    # ── 信息框 ──
+    # 左上: 斜率
+    if analysis and analysis.get("slopes"):
+        slopes = analysis["slopes"]
+        txt = "均线斜率:\n"
+        for name, info in slopes.items():
+            sym = "↑" if info["direction"] == "上升" else "↓" if info["direction"] == "下降" else "→"
+            txt += f"  {name}: {info['slope']:.3f}% {sym}\n"
+        ax_main.text(0.01, 0.97, txt.strip(), transform=ax_main.transAxes,
+                     fontsize=7.5, fontproperties=_cn_font,
+                     verticalalignment="top",
+                     bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                               alpha=0.85, edgecolor="#ccc"))
 
-    # ── 信号评分文本框 ──
+    # 右上: 信号评分
     if signals:
-        sig_text = f"信号评分: {signals.get('score', 0)}\n"
-        sig_text += f"判定: {signals.get('verdict', 'N/A')}\n"
-        sig_text += f"偏多:{signals.get('bullish_count', 0)} 偏空:{signals.get('bearish_count', 0)}"
-        ax_main.text(
-            0.99, 0.97, sig_text.strip(),
-            transform=ax_main.transAxes,
-            fontsize=9, fontproperties=_cn_font,
-            verticalalignment="top", horizontalalignment="right",
-            bbox=dict(
-                boxstyle="round,pad=0.4",
-                facecolor="#1a1a2e", alpha=0.85,
-                edgecolor="#0984e3", linewidth=1,
-            ),
-            color="#ffffff",
-        )
+        sc = signals.get("score", 0)
+        vd = signals.get("verdict", "N/A")
+        bg = "#1a1a2e" if abs(sc) >= 2 else "#2d2d2d"
+        txt = f"评分: {sc}\n{vd}\n↑{signals.get('bullish_count',0)} ↓{signals.get('bearish_count',0)}"
+        ax_main.text(0.99, 0.97, txt.strip(), transform=ax_main.transAxes,
+                     fontsize=9, fontproperties=_cn_font,
+                     verticalalignment="top", horizontalalignment="right",
+                     bbox=dict(boxstyle="round,pad=0.4", facecolor=bg, alpha=0.85,
+                               edgecolor="#0984e3", linewidth=1),
+                     color="#ffffff")
 
+    # 右下: 价格信息
+    curr = df_plot["Close"].iloc[-1]
+    prev = df_plot["Close"].iloc[-2] if n >= 2 else curr
+    chg = (curr - prev) / prev * 100 if prev else 0
+    vol_m = df_plot["Volume"].iloc[-1] / 1e6
+    txt = f"收盘: {curr:.2f}\n涨跌: {chg:+.2f}%\n成交量: {vol_m:.1f}M"
+    ax_main.text(0.99, 0.01, txt.strip(), transform=ax_main.transAxes,
+                 fontsize=8, fontproperties=_cn_font,
+                 verticalalignment="bottom", horizontalalignment="right",
+                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                           alpha=0.8, edgecolor="#ddd"))
+
+    # ── 保存 ──
     fpath = CHART_DIR / f"{ticker}_kline_trend.png"
     fig.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close(fig)
