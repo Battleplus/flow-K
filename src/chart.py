@@ -9,7 +9,6 @@
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as _fm
 import matplotlib.patches as mpatches
 import warnings
 import numpy as np
@@ -17,16 +16,12 @@ import pandas as pd
 from pathlib import Path
 import mplfinance as mpf
 
+from src.plot_fonts import configure_chinese_font
+
 warnings.filterwarnings("ignore", message="Glyph.*missing from font")
 
 # 字体
-_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
-_fm.fontManager.addfont(_FONT_PATH)
-_cn_font = _fm.FontProperties(fname=_FONT_PATH)
-_cn_font_name = _cn_font.get_name()
-matplotlib.rcParams["font.family"] = "sans-serif"
-matplotlib.rcParams["font.sans-serif"] = [_cn_font_name, "Microsoft YaHei", "SimHei", "DejaVu Sans"]
-matplotlib.rcParams["axes.unicode_minus"] = False
+_cn_font = configure_chinese_font()
 
 ROOT = Path(__file__).resolve().parent.parent
 CHART_DIR = ROOT / "outputs" / "charts"
