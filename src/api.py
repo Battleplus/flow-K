@@ -16,6 +16,9 @@ from src.patterns import add_indicators, detect_all, signal_summary, get_active_
 from src.chart import plot_kline_trend
 from src.factors import add_all_factors
 from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity
+from src.news_analysis import analyze_news
+from src.sector_rotation import get_sector_snapshot
+from src.three_dim_analyzer import three_dim_scan, three_dim_single
 
 app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 
@@ -163,87 +166,90 @@ def api_strategies_list():
 @app.route("/api/backtest/<ticker>")
 def api_backtest(ticker):
     """
-    对指定股票回测所有策略
+    Walk-Forward 回测（主）+ 传统样本内回测（参考）
+
     参数:
       strategy:   指定策略ID (可选, 不传则回测全部)
-      period:     数据周期 (默认1y)
+      period:     数据周期 (自动升级: short=1y, medium=2y, long=3y)
       capital:    初始资金 (默认100000)
       worst_case: 最差执行模式 (true/false, 默认true)
-      limit:      涨跌停限制百分比 (0=关闭, 默认0, 例如 limit=0.1 表示单日涨跌超10%禁止交易)
+      hold:       持仓周期 short/medium/long
     """
-    period = request.args.get("period", "1y")
-    strategy_id = request.args.get("strategy", None)
-    capital = float(request.args.get("capital", 100000))
-    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
-    limit_pct = float(request.args.get("limit", 0))
     hold_profile = request.args.get("hold", "medium")
     if hold_profile not in ("short", "medium", "long"):
         hold_profile = "medium"
 
+    # 自动升级数据周期，确保 WF 有足够数据
+    auto_period = {"short": "1y", "medium": "2y", "long": "3y"}
+    period = request.args.get("period", auto_period.get(hold_profile, "2y"))
+
+    strategy_id = request.args.get("strategy", None)
+    capital = float(request.args.get("capital", 100000))
+    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
+    limit_pct = float(request.args.get("limit", 0))
+
     try:
-        from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary, HOLD_PROFILES
+        from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary, HOLD_PROFILES, rank_strategies
+        from src.walkforward import walk_forward, result_to_dict as wf_to_dict
 
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
 
-        if strategy_id:
-            if strategy_id not in STRATEGIES:
-                return jsonify({"error": f"未知策略: {strategy_id}"}), 400
-            r = backtest_strategy(df, strategy_id, initial_capital=capital,
-                                  worst_case=worst_case, limit_pct=limit_pct,
-                                  hold_override=HOLD_PROFILES[hold_profile])
-            result = {
-                "ticker": ticker.upper(),
-                "period": period,
-                "strategy_id": strategy_id,
-                "strategy_name": r.strategy_name,
-                "total_return": round(r.total_return * 100, 2),
-                "annual_return": round(r.annual_return * 100, 2),
-                "sharpe_ratio": round(r.sharpe_ratio, 2),
-                "max_drawdown": round(r.max_drawdown * 100, 2),
-                "win_rate": round(r.win_rate * 100, 1),
-                "total_trades": r.total_trades,
-                "avg_return_per_trade": round(r.avg_return_per_trade * 100, 2),
-                "avg_hold_days": round(r.avg_hold_days, 0),
-                "profit_factor": round(r.profit_factor, 2),
-                "worst_case": worst_case,
-                "limit_pct": limit_pct,
-                "hold_profile": hold_profile,
-                # 最近20天的信号
-                "recent_signals": r.signal_series.iloc[-20:].tolist(),
+        # === Walk-Forward 样本外回测（主结果）===
+        wf = walk_forward(df, hold_profile=hold_profile, worst_case=worst_case,
+                          initial_capital=capital, top_k=5)
+        wf_dict = wf_to_dict(wf)
+
+        # === 传统样本内回测（参考对比）===
+        results = backtest_all(df, initial_capital=capital, min_trades=1,
+                               worst_case=worst_case, limit_pct=limit_pct,
+                               hold_profile=hold_profile)
+        summary_df = get_strategy_summary(results)
+
+        in_sample_strategies = {}
+        for _, row in summary_df.iterrows():
+            sid = row["策略ID"]
+            in_sample_strategies[sid] = {
+                "name": row["策略名称"],
+                "category": row["分类"],
+                "total_return": row["总收益率"],
+                "annual_return": row["年化收益"],
+                "sharpe_ratio": row["夏普比率"],
+                "max_drawdown": row["最大回撤"],
+                "win_rate": row["胜率"],
+                "total_trades": row["交易次数"],
+                "avg_return_per_trade": row["平均收益"],
+                "avg_hold_days": row["平均持仓"],
+                "profit_factor": row["盈亏比"],
             }
-        else:
-            results = backtest_all(df, initial_capital=capital, min_trades=1,
-                                   worst_case=worst_case, limit_pct=limit_pct,
-                                   hold_profile=hold_profile)
-            summary_df = get_strategy_summary(results)
-            result = {
-                "ticker": ticker.upper(),
-                "period": period,
-                "hold_profile": hold_profile,
-                "hold_label": HOLD_PROFILES[hold_profile]["label"],
-                "worst_case": worst_case,
-                "strategies": {},
-                "ranked_by_sharpe": [],
-            }
-            for _, row in summary_df.iterrows():
-                sid = row["策略ID"]
-                result["strategies"][sid] = {
-                    "name": row["策略名称"],
-                    "category": row["分类"],
-                    "total_return": row["总收益率"],
-                    "annual_return": row["年化收益"],
-                    "sharpe_ratio": row["夏普比率"],
-                    "max_drawdown": row["最大回撤"],
-                    "win_rate": row["胜率"],
-                    "total_trades": row["交易次数"],
-                    "avg_return_per_trade": row["平均收益"],
-                    "avg_hold_days": row["平均持仓"],
-                    "profit_factor": row["盈亏比"],
-                }
-            from src.strategies import rank_strategies
-            ranked = rank_strategies(results, "sharpe_ratio")
-            result["ranked_by_sharpe"] = [sid for sid, _, _ in ranked]
+        ranked = rank_strategies(results, "sharpe_ratio")
+
+        # 买入持有
+        bh_return = (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
+
+        result = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "hold_profile": hold_profile,
+            "hold_label": HOLD_PROFILES[hold_profile]["label"],
+            "worst_case": worst_case,
+            "n_data_days": len(df),
+            "data_start": str(df["Date"].iloc[0]) if "Date" in df.columns else str(df.index[0]),
+            "data_end": str(df["Date"].iloc[-1]) if "Date" in df.columns else str(df.index[-1]),
+
+            # 主结果：Walk-Forward 样本外
+            "walk_forward": wf_dict,
+
+            # 参考对比：传统样本内
+            "in_sample_reference": {
+                "strategies": in_sample_strategies,
+                "ranked_by_sharpe": [sid for sid, _, _ in ranked],
+            },
+
+            # 基准
+            "buy_hold_return": round(bh_return * 100, 2),
+            "overfit_gap": round(wf_dict["in_sample_return"] - wf_dict["total_return"], 2),
+        }
 
         return jsonify(result)
     except Exception as e:
@@ -287,54 +293,67 @@ def api_consensus(ticker):
 @app.route("/api/portfolio/<ticker>")
 def api_portfolio(ticker):
     """
-    策略组合分析
-    返回:
-      - 市场状态识别
-      - 多种组合方式回测结果 (等权/夏普加权/状态驱动/动态波动率)
-      - 买入持有基准
-      - 组合权益曲线图
+    Walk-Forward 组合回测（主）+ 传统样本内组合（参考）
+
+    主结果: Walk-Forward 样本外组合表现
+    参考:   传统全量样本内组合分析 + 市场状态
     """
-    period = request.args.get("period", "1y")
-    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
-    limit_pct = float(request.args.get("limit", 0))
     hold_profile = request.args.get("hold", "medium")
     if hold_profile not in ("short", "medium", "long"):
         hold_profile = "medium"
 
+    auto_period = {"short": "1y", "medium": "2y", "long": "3y"}
+    period = request.args.get("period", auto_period.get(hold_profile, "2y"))
+    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
+    limit_pct = float(request.args.get("limit", 0))
+
     try:
-        from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
-        from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES
+        from src.strategy_portfolio import analyze_portfolio, detect_market_regime
+        from src.strategies import HOLD_PROFILES
+        from src.walkforward import walk_forward, result_to_dict as wf_to_dict
 
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
+        hp = HOLD_PROFILES[hold_profile]
 
+        # === Walk-Forward 样本外组合（主结果）===
+        wf = walk_forward(df, hold_profile=hold_profile, worst_case=worst_case,
+                          initial_capital=100000, top_k=5)
+        wf_dict = wf_to_dict(wf)
+
+        # === 传统样本内组合（参考对比）===
         summary = analyze_portfolio(df, worst_case=worst_case, limit_pct=limit_pct,
                                     hold_profile=hold_profile)
 
-        hp = HOLD_PROFILES[hold_profile]
-        bt_all = backtest_all(df, worst_case=worst_case, limit_pct=limit_pct,
-                              hold_profile=hold_profile)
-        ranked = rank_strategies(bt_all, "sharpe_ratio")
-        top5 = [sid for sid, _, _ in ranked[:5]]
-        portfolio_result = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct,
-                                              stop_loss_pct=hp["sl"], take_profit_pct=hp["tp"],
-                                              hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"])
-        chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
+        # 买入持有
+        bh_return = (df["Close"].iloc[-1] - df["Close"].iloc[0]) / df["Close"].iloc[0]
 
         return jsonify({
             "ticker": ticker.upper(),
             "period": period,
             "hold_profile": hold_profile,
-            "hold_label": HOLD_PROFILES[hold_profile]["label"],
+            "hold_label": hp["label"],
             "hold_params": {
                 "hold_min": hp["hold_min"], "hold_max": hp["hold_max"],
                 "stop_loss_pct": round(hp["sl"] * 100, 1), "take_profit_pct": round(hp["tp"] * 100, 1),
             },
+            "n_data_days": len(df),
+            "data_start": str(df["Date"].iloc[0]) if "Date" in df.columns else str(df.index[0]),
+            "data_end": str(df["Date"].iloc[-1]) if "Date" in df.columns else str(df.index[-1]),
+
+            # 主结果
+            "walk_forward": wf_dict,
+
+            # 参考对比
+            "in_sample_reference": {
+                "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
+                "top_strategies": summary.get("top_strategies", []),
+            },
             "market_regime": summary.get("regime_info", {}),
-            "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
-            "buy_hold": summary.get("buy_hold", {}),
-            "top_strategies": summary.get("top_strategies", []),
-            "portfolio_chart_path": chart_path,
+
+            # 基准
+            "buy_hold_return": round(bh_return * 100, 2),
+            "overfit_gap": round(wf_dict["in_sample_return"] - wf_dict["total_return"], 2),
         })
     except Exception as e:
         import traceback
@@ -778,9 +797,222 @@ def api_factors(ticker):
         return jsonify({"error": str(e)}), 500
 
 
+# ── 三维分析 ──────────────────────────────────────────────
+@app.route("/api/news_analyze", methods=["POST"])
+def news_analyze():
+    """消息面分析：输入新闻文本，返回板块评分"""
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "请提供新闻文本 (text)"}), 400
+    try:
+        result = analyze_news(text)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sector_snapshot")
+def sector_snapshot():
+    """板块ETF快照：11个板块的趋势+RS+资金流向"""
+    try:
+        snap = get_sector_snapshot()
+        return jsonify(snap)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/three_dim_scan", methods=["POST"])
+def three_dim_scan_api():
+    """三维全链路扫描：新闻→板块→个股→TOP推荐"""
+    data = request.get_json(silent=True) or {}
+    news_text = data.get("news_text", "").strip() or None
+    period = data.get("period", "6mo")
+    top_n = min(int(data.get("top_n", 10)), 20)  # 上限20
+    try:
+        result = three_dim_scan(news_text=news_text, period=period, top_n=top_n)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/three_dim/<ticker>")
+def three_dim_ticker(ticker):
+    """单只股票三维分析详情"""
+    period = request.args.get("period", "6mo")
+    try:
+        result = three_dim_single(ticker.upper(), period=period)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recommendations")
+def api_recommendations():
+    """三维推荐结果：返回预扫描的JSON数据"""
+    import json as _json
+    rec_path = ROOT / "outputs" / "stock_recommendations.json"
+    if not rec_path.exists():
+        return jsonify({"error": "推荐数据尚未生成，请先运行 src/full_scan.py"}), 404
+    try:
+        with open(rec_path, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/recommendations/run", methods=["POST"])
+def api_recommendations_run():
+    """触发三维全板块扫描（异步，返回结果到 /api/recommendations）"""
+    import json as _json
+    data = request.get_json(silent=True) or {}
+    news_text = data.get("news_text", "").strip() or "AI semiconductor technology data center cloud computing chips GPU"
+    top_n = min(int(data.get("top_n", 10)), 20)
+
+    try:
+        from src.screener import analyze_ticker
+        from src.news_analysis import analyze_news
+        from src.sector_rotation import get_sector_snapshot
+
+        TICKERS = {
+            "Technology": ["AAPL","MSFT","NVDA","AVGO","AMD","GOOGL","META","ADBE","CRM","INTC"],
+            "Financials": ["JPM","BAC","WFC","V","MA","GS","MS","BLK"],
+            "Healthcare": ["JNJ","UNH","PFE","ABBV","LLY","MRK","TMO","ABT"],
+            "Consumer Cyclical": ["AMZN","TSLA","HD","NKE","MCD","SBUX","LOW","F"],
+            "Communication Services": ["GOOGL","META","NFLX","DIS","CMCSA","TMUS"],
+            "Industrials": ["CAT","GE","HON","UPS","RTX","LMT","DE","EMR"],
+            "Consumer Defensive": ["PG","KO","PEP","WMT","COST","MO","PM"],
+            "Energy": ["XOM","CVX","COP","SLB","EOG","PSX"],
+            "Utilities": ["NEE","DUK","SO","D","AEP","SRE"],
+            "Real Estate": ["PLD","AMT","EQIX","SPG","O","PSA"],
+            "Basic Materials": ["LIN","FCX","NEM","APD","DOW","ECL"],
+        }
+
+        news = analyze_news(news_text)
+        snap = get_sector_snapshot()
+        sector_flow = {}
+        for s in snap["sectors"]:
+            sector_flow[s["sector"]] = {
+                "flow": s["flow_score"],
+                "rs": s["rs_score"],
+                "rs_short": s["rs_short_score"],
+            }
+
+        all_results = []
+        for sector, tickers in TICKERS.items():
+            ns = news["sector_scores"].get(sector, 0)
+            sf = sector_flow.get(sector, {})
+            sector_score = ns * 0.4 + sf.get("flow", 0) * 0.6
+
+            for ticker in tickers:
+                try:
+                    info = analyze_ticker(ticker, period="6mo")
+                    if info is None:
+                        continue
+                except Exception:
+                    continue
+
+                direction_map = {
+                    "strong_bullish": 2.0, "bullish": 1.0,
+                    "neutral": 0.0, "bearish": -1.0, "strong_bearish": -2.0,
+                }
+                base = direction_map.get(info["consensus_direction"], 0.0)
+                adj = max(-0.5, min(0.5, info["aggregate_score"] * 0.2))
+                stock_3d = round(max(-2.0, min(2.0, base + adj)), 1)
+
+                final = round(ns * 0.25 + sector_score * 0.35 + stock_3d * 0.4, 1)
+                final = max(-3.0, min(3.0, final))
+
+                all_results.append({
+                    "ticker": ticker,
+                    "sector": sector,
+                    "news": round(ns, 1),
+                    "sector_sc": round(sector_score, 1),
+                    "stock": stock_3d,
+                    "final": final,
+                    "direction": info["consensus_direction"],
+                    "sharpe": round(info.get("avg_sharpe_top5", 0), 2),
+                    "pf_return": round(info.get("pf_return", 0), 1),
+                    "signal_net": info.get("signal_net", 0),
+                    "close": info.get("close", 0),
+                })
+
+        all_results.sort(key=lambda x: x["final"], reverse=True)
+
+        by_sector = {}
+        for r in all_results:
+            s = r["sector"]
+            if s not in by_sector:
+                by_sector[s] = []
+            by_sector[s].append(r)
+        by_sector = {k: sorted(v, key=lambda x: x["final"], reverse=True) for k, v in by_sector.items()}
+
+        output = {
+            "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "news_text": news_text,
+            "sector_snapshot": snap["sectors"],
+            "all_results": all_results,
+            "by_sector": by_sector,
+            "top_10": all_results[:top_n],
+        }
+
+        rec_path = ROOT / "outputs" / "stock_recommendations.json"
+        with open(rec_path, "w", encoding="utf-8") as f:
+            _json.dump(output, f, indent=2, default=str, ensure_ascii=False)
+
+        return jsonify(output)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/walkforward/<ticker>")
+def api_walkforward(ticker):
+    """
+    Walk-Forward 滚动验证回测
+
+    参数:
+      period:  数据周期 (默认2y)
+      hold:    持仓周期 short/medium/long (默认medium)
+      top_k:   每折选多少策略 (默认5)
+      compare: true=同时返回传统回测对比 (默认true)
+    """
+    period = request.args.get("period", "2y")
+    hold_profile = request.args.get("hold", "medium")
+    if hold_profile not in ("short", "medium", "long"):
+        hold_profile = "medium"
+    top_k = int(request.args.get("top_k", 5))
+    do_compare = request.args.get("compare", "true").lower() in ("true", "1", "yes")
+
+    try:
+        from src.walkforward import walk_forward, result_to_dict, compare_in_sample_vs_oos, WF_WINDOWS
+
+        df = fetch_data(ticker, period=period)
+        df = add_all_factors(df)
+
+        if do_compare:
+            result = compare_in_sample_vs_oos(df, hold_profile=hold_profile, worst_case=True, top_k=top_k)
+            result["ticker"] = ticker.upper()
+            result["hold_profile"] = hold_profile
+            result["data_days"] = len(df)
+            result["window_config"] = WF_WINDOWS.get(hold_profile, {})
+            return jsonify(result)
+        else:
+            wf = walk_forward(df, hold_profile=hold_profile, worst_case=True, top_k=top_k)
+            d = result_to_dict(wf)
+            d["ticker"] = ticker.upper()
+            d["hold_profile"] = hold_profile
+            d["data_days"] = len(df)
+            return jsonify(d)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
 if __name__ == "__main__":
     print("=" * 60)
-    print("  FLOW AI Trading Dashboard")
+    print("  FLOW AI Trading Dashboard v2 — 三维分析")
     print("=" * 60)
     print("  天级数据:   /api/daily/<ticker>")
     print("               /api/daily_summary/<ticker>")
@@ -791,8 +1023,15 @@ if __name__ == "__main__":
     print("  策略/组合:  /api/backtest/<ticker>")
     print("               /api/consensus/<ticker>")
     print("               /api/portfolio/<ticker>")
+    print("  Walk-Forward: /api/walkforward/<ticker>")
     print("  分析/因子:  /api/analyze/<ticker>")
     print("               /api/factors/<ticker>")
+    print("  🆕 三维分析: /api/news_analyze (POST)")
+    print("               /api/sector_snapshot")
+    print("               /api/three_dim_scan (POST)")
+    print("               /api/three_dim/<ticker>")
+    print("               /api/recommendations")
+    print("               /api/recommendations/run (POST)")
     print("=" * 60)
     print("  Open http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=True)

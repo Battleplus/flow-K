@@ -545,7 +545,7 @@ def _strategy_bb_squeeze(df: pd.DataFrame) -> pd.Series:
     if not all(c in df.columns for c in ["bb_upper", "bb_lower", "bb_mid"]):
         return sig
     bbw = (df["bb_upper"] - df["bb_lower"]) / df["bb_mid"]
-    threshold = bbw.quantile(0.1)  # 历史10%分位
+    threshold = bbw.rolling(120, min_periods=20).quantile(0.1)  # 滚动10%分位，避免未来函数
     squeeze = bbw < threshold
     vol_ratio = df.get("volume_ratio", pd.Series(1, index=df.index))
     sig[squeeze & (df["Close"] > df["bb_upper"]) & (vol_ratio > 1.5)] = Signal.BUY.value

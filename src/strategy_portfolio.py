@@ -54,12 +54,15 @@ def detect_market_regime(df: pd.DataFrame) -> MarketRegime:
     dist_ma20 = abs(price - ma20) / ma20 if ma20 != 0 else 0
     dist_ma60 = abs(price - ma60) / ma60 if ma60 != 0 else 0
 
-    # 计算布林带宽度历史分位
+    # 计算布林带宽度滚动分位 (避免未来函数)
     bbw = (latest.get("bb_upper", 0) - latest.get("bb_lower", 1)) / latest.get("bb_mid", 1)
     bbw_series = (df.get("bb_upper", pd.Series(1, index=df.index)) - df.get("bb_lower", pd.Series(1, index=df.index))) / df.get("bb_mid", pd.Series(1, index=df.index))
     bbw_pct = 0.5
-    if bbw_series.std() > 0:
-        bbw_pct = (bbw - bbw_series.min()) / (bbw_series.max() - bbw_series.min())
+    roll_min = bbw_series.rolling(120, min_periods=20).min()
+    roll_max = bbw_series.rolling(120, min_periods=20).max()
+    roll_range = roll_max - roll_min
+    if roll_range.iloc[-1] > 0:
+        bbw_pct = (bbw - roll_min.iloc[-1]) / roll_range.iloc[-1]
     bbw_pct = np.clip(bbw_pct, 0, 1)
 
     # 趋势强度: 计算所有均线的得分
