@@ -1,6 +1,7 @@
-﻿# K 线策略研究工具依赖
-
-pandas>=2.0.0
+﻿pandas>=2.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
+mplfinance>=0.12.0
+yfinance>=1.5.0
 flask>=3.0.0
+scipy>=1.10.0

@@ -1,14 +1,14 @@
-﻿"""K 线绘图模块"""
+﻿"""图表模块 - mplfinance K线 + 多色均线 + 趋势标注"""
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import mplfinance as mpf
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from matplotlib.patches import FancyBboxPatch
 
-# 中文字体
 plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -16,120 +16,126 @@ ROOT = Path(__file__).resolve().parent.parent
 CHART_DIR = ROOT / "outputs" / "charts"
 CHART_DIR.mkdir(parents=True, exist_ok=True)
 
-# 信号名称 -> 中文标签映射
-SIGNAL_LABELS = {
-    "big_bull_breakout": "大阳线突破",
-    "support_bounce": "支撑位反弹",
-    "long_lower_shadow": "长下影线",
-    "reversal_after_decline": "回调后转强",
+# 均线颜色方案
+MA_COLORS = {
+    "ma5": "#ff9800",   # 橙色
+    "ma10": "#2196f3",  # 蓝色
+    "ma20": "#9c27b0",  # 紫色
+    "ma60": "#4caf50",  # 绿色
 }
-
-# 信号 -> 标记样式
-SIGNAL_MARKERS = {
-    "signal_big_bull_breakout": ("^", "#26a69a", "大阳线突破"),
-    "signal_support_bounce": ("s", "#42a5f5", "支撑位反弹"),
-    "signal_long_lower_shadow": ("v", "#ff9800", "长下影线"),
-    "signal_reversal_after_decline": ("D", "#ab47bc", "回调后转强"),
-}
+MA_LINEWIDTH = {"ma5": 0.8, "ma10": 0.8, "ma20": 1.2, "ma60": 1.5}
 
 
-def plot_kline_with_signals(
+def plot_kline_trend(
     df: pd.DataFrame,
     ticker: str,
-    signal_cols: list[str] | None = None,
-    lookback: int = 120,
+    analysis: dict,
     save: bool = True,
 ) -> str:
-    """绘制最近 lookback 天的 K 线 + MA + 信号标记。返回保存路径。"""
-    df = df.tail(lookback).copy()
-    df["idx"] = range(len(df))
+    """绘制专业 K 线图 + 多色均线 + 趋势标注"""
 
-    fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(14, 8),
-        gridspec_kw={"height_ratios": [3, 1]},
-        sharex=True,
+    # 准备 mplfinance 格式数据
+    df_plot = df.copy()
+    df_plot["Date"] = pd.to_datetime(df_plot["Date"])
+    df_plot = df_plot.set_index("Date")
+
+    # 构建均线 addplot
+    apds = []
+    for col in ["ma5", "ma10", "ma20", "ma60"]:
+        if col in df_plot.columns:
+            apds.append(
+                mpf.make_addplot(
+                    df_plot[col],
+                    color=MA_COLORS[col],
+                    width=MA_LINEWIDTH[col],
+                    label=col.upper(),
+                )
+            )
+
+    # 自定义风格
+    mc = mpf.make_marketcolors(
+        up="#26a69a", down="#ef5350",
+        edge="inherit", wick="inherit",
+        volume="inherit",
+    )
+    s = mpf.make_mpf_style(
+        marketcolors=mc,
+        gridstyle=":", gridcolor="#e0e0e0",
+        facecolor="#fafbfc",
+        figcolor="#ffffff",
     )
 
-    # K 线
-    colors = np.where(df["Close"] >= df["Open"], "#26a69a", "#ef5350")
-    ax1.bar(df["idx"], df["High"] - df["Low"], bottom=df["Low"],
-            color=colors, width=0.6, linewidth=0.5)
-    ax1.bar(df["idx"], abs(df["Close"] - df["Open"]),
-            bottom=df[["Open", "Close"]].min(axis=1),
-            color=colors, width=0.8, linewidth=0.5)
+    fig, axes = mpf.plot(
+        df_plot,
+        type="candle",
+        style=s,
+        addplot=apds,
+        volume=True,
+        figsize=(16, 9),
+        title=f"{ticker}  趋势: {analysis['overall_trend']} | {analysis['ma_alignment']['alignment']}",
+        returnfig=True,
+        warn_too_much_data=len(df_plot) + 1,
+    )
 
-    # 均线
-    for col, ls, lw in [("ma5", "-", 1), ("ma20", "--", 1.2), ("ma60", ":", 1)]:
-        if col in df.columns:
-            ax1.plot(df["idx"], df[col], label=col.upper(), linewidth=lw, linestyle=ls, alpha=0.8)
+    ax_main = axes[0]
+    ax_vol = axes[2]
 
-    # 信号标记（中文标签）
-    if signal_cols:
-        for sc in signal_cols:
-            if sc in df.columns and sc in SIGNAL_MARKERS:
-                m, c, label = SIGNAL_MARKERS[sc]
-                pts = df[df[sc] == 1]
-                if not pts.empty:
-                    ax1.scatter(pts["idx"], pts["Low"] * 0.995, marker=m,
-                                color=c, s=80, zorder=5, label=label, edgecolors="white")
+    # 标注支撑/压力位
+    sr = analysis.get("support_resistance", {})
+    support = sr.get("support")
+    resistance = sr.get("resistance")
+    if support:
+        ax_main.axhline(y=support, color="#4caf50", linestyle="--", linewidth=1, alpha=0.7)
+        ax_main.text(len(df_plot) - 1, support, f" 支撑 {support}", fontsize=9, color="#4caf50", va="bottom")
+    if resistance:
+        ax_main.axhline(y=resistance, color="#ef5350", linestyle="--", linewidth=1, alpha=0.7)
+        ax_main.text(len(df_plot) - 1, resistance, f" 压力 {resistance}", fontsize=9, color="#ef5350", va="top")
 
-    ax1.set_title(f"{ticker} K线图与信号标记", fontsize=14, fontweight="bold")
-    ax1.legend(loc="upper left", fontsize=8, ncol=2)
-    ax1.set_ylabel("价格")
-    ax1.grid(True, alpha=0.3)
+    # 标注均线交叉点
+    crosses = analysis.get("crosses", [])
+    for c in crosses[-5:]:  # 最近 5 个交叉
+        try:
+            cross_date = pd.to_datetime(c["date"])
+            if cross_date in df_plot.index:
+                idx = df_plot.index.get_loc(cross_date)
+                label = "▲金叉" if c["type"] == "金叉" else "▼死叉"
+                color = "#26a69a" if c["type"] == "金叉" else "#ef5350"
+                price = df_plot.iloc[idx]["Low"] * 0.98
+                ax_main.annotate(
+                    label, (idx, price),
+                    fontsize=8, color=color, fontweight="bold",
+                    ha="center", va="top",
+                )
+        except Exception:
+            pass
 
-    # 成交量
-    vol_colors = np.where(df["Close"] >= df["Open"], "#26a69a", "#ef5350")
-    ax2.bar(df["idx"], df["Volume"], color=vol_colors, width=0.8, alpha=0.7)
-    if "vol_ma20" in df.columns:
-        ax2.plot(df["idx"], df["vol_ma20"], color="black", linewidth=0.8, linestyle="--", label="VOL MA20")
-    ax2.set_ylabel("成交量")
-    ax2.legend(loc="upper left", fontsize=8)
-    ax2.grid(True, alpha=0.3)
+    # 图例
+    legend_lines = []
+    legend_labels = []
+    for col in ["ma5", "ma10", "ma20", "ma60"]:
+        if col in df_plot.columns:
+            from matplotlib.lines import Line2D
+            legend_lines.append(Line2D([0], [0], color=MA_COLORS[col], linewidth=1.5))
+            legend_labels.append(col.upper())
+    if legend_lines:
+        ax_main.legend(legend_lines, legend_labels, loc="upper left", fontsize=9, ncol=4)
 
-    # x 轴标签
-    tick_step = max(1, len(df) // 8)
-    tick_idx = df["idx"].iloc[::tick_step]
-    tick_labels = df["Date"].iloc[::tick_step].dt.strftime("%Y-%m-%d")
-    ax2.set_xticks(tick_idx)
-    ax2.set_xticklabels(tick_labels, rotation=45, ha="right", fontsize=8)
+    # 添加趋势信息文本框
+    slopes = analysis.get("slopes", {})
+    slope_text = "均线斜率:\n"
+    for name, info in slopes.items():
+        direction_symbol = "↑" if info["direction"] == "上升" else "↓" if info["direction"] == "下降" else "→"
+        slope_text += f"  {name}: {info['slope']}% {direction_symbol}  {info['direction']}\n"
 
-    plt.tight_layout()
-    fpath = CHART_DIR / f"{ticker}_kline_signals.png"
-    fig.savefig(fpath, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    return str(fpath)
+    ax_main.text(
+        0.01, 0.97, slope_text.strip(),
+        transform=ax_main.transAxes,
+        fontsize=8, fontfamily="monospace",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.85, edgecolor="#ccc"),
+    )
 
-
-def plot_forward_distribution(
-    df: pd.DataFrame,
-    signal_col: str,
-    ticker: str,
-    forward_n: int = 5,
-    save: bool = True,
-) -> str:
-    """绘制信号后未来 N 日收益分布直方图"""
-    col = f"fwd_ret_{forward_n}d"
-    if col not in df.columns or signal_col not in df.columns:
-        return ""
-    vals = df.loc[df[signal_col] == 1, col].dropna() * 100
-    if len(vals) < 3:
-        return ""
-
-    signal_name = signal_col.replace("signal_", "")
-    chinese_name = SIGNAL_LABELS.get(signal_name, signal_name)
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.hist(vals, bins=30, color="#4a90d9", edgecolor="white", alpha=0.85)
-    ax.axvline(0, color="red", linestyle="--", linewidth=1.2)
-    ax.axvline(vals.mean(), color="green", linestyle="-", linewidth=1.5, label=f"均值: {vals.mean():.2f}%")
-    ax.set_title(f"{ticker} - {chinese_name} 未来{forward_n}日收益分布 (n={len(vals)})", fontsize=12, fontweight="bold")
-    ax.set_xlabel("收益率 %")
-    ax.set_ylabel("次数")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    fpath = CHART_DIR / f"{ticker}_{signal_col}_fwd{forward_n}d_dist.png"
+    fpath = CHART_DIR / f"{ticker}_kline_trend.png"
     fig.savefig(fpath, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return str(fpath)

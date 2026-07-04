@@ -1,0 +1,177 @@
+{
+  "version": "1.0",
+  "description": "事件关键词→板块ETF映射表，用于消息面分析",
+  "sector_etf_map": {
+    "Technology": "XLK",
+    "Healthcare": "XLV",
+    "Financials": "XLF",
+    "Energy": "XLE",
+    "Industrials": "XLI",
+    "Consumer Discretionary": "XLY",
+    "Consumer Staples": "XLP",
+    "Utilities": "XLU",
+    "Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC"
+  },
+  "event_keywords": [
+    {
+      "keywords": ["AI", "artificial intelligence", "芯片", "chip", "semiconductor", "算力", "GPU", "大模型", "LLM", "NVIDIA", "AMD", "TSMC", "台积电", "data center", "数据中心", "cloud computing", "云计算", "machine learning", "deep learning", "SaaS", "软件"],
+      "sector": "Technology",
+      "etf": "XLK",
+      "direction": "positive",
+      "weight": 1.5,
+      "note": "AI/芯片/算力相关新闻直接利好科技板块"
+    },
+    {
+      "keywords": ["降息", "rate cut", "interest rate", "利率", "美联储", "Fed", "FOMC", "加息", "rate hike", "monetary policy", "货币政策", "量化宽松", "QE", "quantitative easing"],
+      "sector": "Financials",
+      "etf": "XLF",
+      "direction": "mixed",
+      "weight": 1.0,
+      "note": "降息利好银行利差收入但压缩净息差；加息反向。需结合具体方向判断"
+    },
+    {
+      "keywords": ["降息", "rate cut", "利率下降", "mortgage", "房贷", "housing", "房地产", "REIT", "property"],
+      "sector": "Real Estate",
+      "etf": "XLRE",
+      "direction": "positive",
+      "weight": 1.2,
+      "note": "降息直接利好房地产板块，降低融资成本"
+    },
+    {
+      "keywords": ["油价", "oil price", "crude", "原油", "OPEC", "OPEC+", "减产", "production cut", "地缘冲突", "geopolitical", "中东", "Middle East", "war", "战争", "sanction", "制裁", "天然气", "natural gas", "energy", "能源"],
+      "sector": "Energy",
+      "etf": "XLE",
+      "direction": "positive",
+      "weight": 1.3,
+      "note": "油价上涨/地缘风险利好能源板块"
+    },
+    {
+      "keywords": ["医保", "healthcare policy", "新药", "drug approval", "FDA", "药监局", "clinical trial", "临床试验", "vaccine", "疫苗", "biotech", "生物科技", "medical device", "医疗器械", "pharmaceutical", "制药"],
+      "sector": "Healthcare",
+      "etf": "XLV",
+      "direction": "positive",
+      "weight": 1.0,
+      "note": "新药审批/医保政策利好医疗板块"
+    },
+    {
+      "keywords": ["关税", "tariff", "贸易战", "trade war", "贸易摩擦", "trade tension", "export control", "出口管制", "sanctions", "trade deal", "贸易协议"],
+      "sector": "Industrials",
+      "etf": "XLI",
+      "direction": "negative",
+      "weight": 1.2,
+      "note": "关税/贸易战利空工业和材料板块（供应链成本上升）"
+    },
+    {
+      "keywords": ["关税", "tariff", "贸易战", "trade war", "steel", "钢铁", "aluminum", "铝", "rare earth", "稀土", "mining", "矿业"],
+      "sector": "Materials",
+      "etf": "XLB",
+      "direction": "negative",
+      "weight": 1.0,
+      "note": "关税影响材料板块进出口成本"
+    },
+    {
+      "keywords": ["新能源", "renewable energy", "clean energy", "碳中和", "carbon neutral", "EV", "electric vehicle", "电动车", "solar", "太阳能", "wind", "风电", "battery", "电池", "lithium", "锂"],
+      "sector": "Materials",
+      "etf": "XLB",
+      "direction": "positive",
+      "weight": 1.1,
+      "note": "新能源/碳中和利好材料板块（锂、稀土等）"
+    },
+    {
+      "keywords": ["消费刺激", "stimulus", "零售数据", "retail sales", "consumer spending", "消费支出", "e-commerce", "电商", "holiday sales", "假日消费", "Black Friday", "Cyber Monday"],
+      "sector": "Consumer Discretionary",
+      "etf": "XLY",
+      "direction": "positive",
+      "weight": 1.0,
+      "note": "消费数据强劲利好可选消费板块"
+    },
+    {
+      "keywords": ["通胀", "inflation", "CPI", "consumer price", "物价", "食品价格", "food price", "必需品", "staples"],
+      "sector": "Consumer Staples",
+      "etf": "XLP",
+      "direction": "neutral",
+      "weight": 0.8,
+      "note": "必需消费是防御性板块，通胀环境下资金避险流入"
+    },
+    {
+      "keywords": ["电力", "electric", "utility", "公用事业", "核电", "nuclear", "hydrogen", "氢能", "grid", "电网"],
+      "sector": "Utilities",
+      "etf": "XLU",
+      "direction": "positive",
+      "weight": 0.9,
+      "note": "电力需求增长利好公用事业板块"
+    },
+    {
+      "keywords": ["5G", "6G", "通信", "telecom", "broadband", "宽带", "streaming", "流媒体", "social media", "社交媒体", "internet", "互联网", "meta", "google", "advertising", "广告"],
+      "sector": "Communication Services",
+      "etf": "XLC",
+      "direction": "positive",
+      "weight": 1.0,
+      "note": "通信/互联网/媒体相关新闻利好通信服务板块"
+    },
+    {
+      "keywords": ["国防", "defense", "military", "军事", "军费", "defense spending", "aerospace", "航空航天", "weapons", "武器", "NATO", "北约"],
+      "sector": "Industrials",
+      "etf": "XLI",
+      "direction": "positive",
+      "weight": 1.2,
+      "note": "国防开支增加利好工业板块中的军工企业"
+    },
+    {
+      "keywords": ["基建", "infrastructure", "基建投资", "construction", "建筑", "machinery", "机械", "rail", "铁路", "logistics", "物流"],
+      "sector": "Industrials",
+      "etf": "XLI",
+      "direction": "positive",
+      "weight": 1.1,
+      "note": "基建投资利好工业板块"
+    },
+    {
+      "keywords": ["Earnings", "财报", "业绩", "quarterly", "季报", "guidance", "指引", "beat", "超预期", "miss", "不及预期"],
+      "sector": null,
+      "etf": null,
+      "direction": "neutral",
+      "weight": 0.5,
+      "note": "财报数据需结合具体公司判断，不直接映射到板块"
+    },
+    {
+      "keywords": ["VIX", "波动率", "volatility", "恐慌指数", "fear index", "market crash", "崩盘", "bubble", "泡沫", "sell-off", "抛售"],
+      "sector": null,
+      "etf": "SPY",
+      "direction": "negative",
+      "weight": 1.5,
+      "note": "VIX飙升/市场恐慌利空整体市场，避险板块（XLP/XLU）相对受益"
+    }
+  ],
+  "scoring_rules": {
+    "description": "消息面评分规则",
+    "rules": [
+      {
+        "score": 2,
+        "label": "强利好",
+        "condition": "关键词直接命中，且对应板块ETF趋势向上"
+      },
+      {
+        "score": 1,
+        "label": "弱利好",
+        "condition": "关键词命中，但板块ETF趋势不明"
+      },
+      {
+        "score": 0,
+        "label": "中性",
+        "condition": "无关键词命中，或利好利空对冲"
+      },
+      {
+        "score": -1,
+        "label": "弱利空",
+        "condition": "负面关键词命中，板块ETF尚未破位"
+      },
+      {
+        "score": -2,
+        "label": "强利空",
+        "condition": "负面关键词命中，且板块ETF趋势向下"
+      }
+    ]
+  }
+}

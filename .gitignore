@@ -1,21 +1,21 @@
-﻿# Python
 __pycache__/
 *.py[cod]
-*.egg-info/
-
-# Data files (too large, self-provided)
-*.csv
-
-# Outputs (generated at runtime)
 outputs/
-
-# IDE
+.venv/
+venv/
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Jupyter
-.ipynb_checkpoints/
+# Large source data (137MB, exceeds GitHub 100MB limit)
+SP500_Historical_Data.csv
+
+# Local backups
+backup_*/
+
+# WorkBuddy local files
+.workbuddy/
+
+# Temp scripts
+_fix_font.py

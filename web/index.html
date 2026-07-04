@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>K线策略分析仪表盘</title>
+<title>K线趋势斜率分析</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -15,16 +15,17 @@ header {
   display: flex; align-items: center; justify-content: space-between;
 }
 header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
-header .sub { font-size: 13px; color: #a0a0b0; margin-left: 8px; }
 .toolbar {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 24px; background: #fff; border-bottom: 1px solid #e0e0e0;
 }
+.toolbar input {
+  padding: 7px 12px; font-size: 14px; border: 1px solid #ccc;
+  border-radius: 6px; width: 140px;
+}
 .toolbar select {
-  padding: 7px 28px 7px 10px; font-size: 14px; border: 1px solid #ccc;
+  padding: 7px 12px; font-size: 14px; border: 1px solid #ccc;
   border-radius: 6px; background: #fff; cursor: pointer;
-  appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%23666' stroke-width='1.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center;
 }
 .toolbar button {
   padding: 7px 18px; font-size: 14px; border: none; border-radius: 6px;
@@ -32,6 +33,7 @@ header .sub { font-size: 13px; color: #a0a0b0; margin-left: 8px; }
 }
 .toolbar button:hover { background: #0773c5; }
 .toolbar .status { font-size: 13px; color: #888; margin-left: auto; }
+
 main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 
 .cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -42,48 +44,41 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 .card .label { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
 .card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
 .card .sub { font-size: 12px; color: #888; margin-top: 2px; }
-.card.positive .value { color: #00b894; }
-.card.negative .value { color: #d63031; }
-.card.warning .value { color: #e17055; }
+.bullish .value { color: #00b894; }
+.bearish .value { color: #d63031; }
 
-.banner {
-  background: #fff; border-radius: 8px; padding: 14px 20px; margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px;
+.panels { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+.panel {
+  background: #fff; border-radius: 8px; padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); flex: 1; min-width: 280px;
 }
-.banner .verdict {
-  font-size: 18px; font-weight: 700; padding: 4px 14px; border-radius: 6px;
-}
-.banner .verdict.bullish { background: #e6fffa; color: #00b894; }
-.banner .verdict.bearish { background: #ffeaa7; color: #d63031; }
-.banner .verdict.neutral { background: #dfe6e9; color: #636e72; }
-.banner .meta { font-size: 13px; color: #888; }
+.panel h3 { font-size: 14px; margin-bottom: 10px; color: #1a1a2e; border-bottom: 2px solid #0984e3; padding-bottom: 6px; }
 
-.section-title {
-  font-size: 16px; font-weight: 600; margin: 24px 0 12px; color: #1a1a2e;
+.slope-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px;
 }
-table {
-  width: 100%; border-collapse: collapse; background: #fff;
-  border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-th { background: #f8f9fa; padding: 10px 14px; text-align: left; font-size: 13px; color: #666; font-weight: 600; }
-td { padding: 10px 14px; font-size: 14px; border-top: 1px solid #f0f0f0; }
-.badge {
-  display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
-}
-.badge.bullish { background: #e6fffa; color: #00b894; }
-.badge.bearish { background: #ffeaa7; color: #d63031; }
-.badge.neutral { background: #dfe6e9; color: #636e72; }
-.badge.insufficient { background: #f8f9fa; color: #b2bec3; }
-.win-high { color: #00b894; font-weight: 600; }
-.win-mid { color: #636e72; }
-.win-low { color: #d63031; font-weight: 600; }
+.slope-row .name { font-weight: 600; }
+.slope-row .dir { font-size: 12px; padding: 1px 8px; border-radius: 10px; font-weight: 600; }
+.dir.up { background: #e6fffa; color: #00b894; }
+.dir.down { background: #ffeaa7; color: #d63031; }
+.dir.flat { background: #dfe6e9; color: #636e72; }
 
-.charts { display: flex; flex-direction: column; gap: 20px; margin-top: 20px; }
+.sr-row {
+  display: flex; justify-content: space-between; padding: 8px 0;
+  border-bottom: 1px solid #f5f5f5; font-size: 14px;
+}
+
+.cross-item {
+  padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.cross-item .gold { color: #00b894; font-weight: 600; }
+.cross-item .dead { color: #d63031; font-weight: 600; }
+
 .chart-box {
   background: #fff; border-radius: 8px; padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-top: 20px;
 }
-.chart-box h3 { font-size: 15px; margin-bottom: 10px; color: #1a1a2e; }
 .chart-box img { width: 100%; border-radius: 4px; }
 
 .loader {
@@ -96,188 +91,149 @@ td { padding: 10px 14px; font-size: 14px; border-top: 1px solid #f0f0f0; }
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.current-tag {
-  display: inline-block; background: #0984e3; color: #fff;
-  padding: 1px 8px; border-radius: 10px; font-size: 11px; margin-left: 4px;
-}
-
 .hidden { display: none; }
 </style>
 </head>
 <body>
 
 <header>
-  <div><h1>K线策略分析<span class="sub">统计型信号回测仪表盘</span></h1></div>
+  <h1>K线趋势斜率分析</h1>
 </header>
 
 <div class="toolbar">
-  <select id="tickerSelect">
-    <option value="">-- 选择股票 --</option>
+  <input id="tickerInput" placeholder="股票代码" value="NVDA" />
+  <select id="periodSelect">
+    <option value="1y">1 年</option>
+    <option value="6mo">6 个月</option>
+    <option value="3mo">3 个月</option>
+    <option value="1mo">1 个月</option>
   </select>
   <button onclick="analyze()">分析</button>
   <span class="status" id="statusBar">就绪</span>
 </div>
 
-<main id="main">
+<main>
   <div class="loader active" id="loader">
     <div class="spinner"></div>
     <p style="margin-top:12px">正在加载...</p>
   </div>
   <div id="results" class="hidden">
     <div class="cards" id="cards"></div>
-    <div class="banner" id="banner"></div>
-    <div class="section-title">信号历史统计</div>
-    <table id="signalTable">
-      <thead>
-        <tr>
-          <th>信号名称</th>
-          <th>历史出现次数</th>
-          <th>5日胜率</th>
-          <th>5日平均收益</th>
-          <th>10日胜率</th>
-          <th>10日平均收益</th>
-          <th>最大回撤</th>
-          <th>判断</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <div class="charts" id="charts"></div>
+    <div class="panels">
+      <div class="panel" id="slopePanel">
+        <h3>均线斜率</h3>
+        <div id="slopeContent"></div>
+      </div>
+      <div class="panel" id="srPanel">
+        <h3>支撑 / 压力</h3>
+        <div id="srContent"></div>
+      </div>
+      <div class="panel" id="crossPanel">
+        <h3>近期交叉</h3>
+        <div id="crossContent"></div>
+      </div>
+    </div>
+    <div class="chart-box" id="chartBox">
+      <img id="chartImg" src="" alt="K线图" />
+    </div>
   </div>
 </main>
 
 <script>
-const API = '';
-
-async function loadTickers() {
-  const res = await fetch(API + '/api/tickers');
-  const tickers = await res.json();
-  const sel = document.getElementById('tickerSelect');
-  tickers.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t; opt.textContent = t;
-    sel.appendChild(opt);
-  });
-  if (tickers.includes('NVDA')) {
-    sel.value = 'NVDA';
-    analyze();
-  } else if (tickers.length > 0) {
-    sel.value = tickers[0];
-    analyze();
-  }
-}
-
 async function analyze() {
-  const ticker = document.getElementById('tickerSelect').value;
+  const ticker = document.getElementById("tickerInput").value.trim();
   if (!ticker) return;
 
-  document.getElementById('loader').classList.add('active');
-  document.getElementById('results').classList.add('hidden');
-  document.getElementById('statusBar').textContent = '分析中...';
+  document.getElementById("loader").classList.add("active");
+  document.getElementById("results").classList.add("hidden");
+  document.getElementById("statusBar").textContent = "分析中...";
 
   try {
-    const res = await fetch(API + '/api/analyze/' + ticker);
+    const period = document.getElementById("periodSelect").value;
+    const res = await fetch("/api/analyze/" + ticker + "?period=" + period);
     const data = await res.json();
+    if (data.error) { throw new Error(data.error); }
     render(data);
-    document.getElementById('statusBar').textContent = '分析完成';
+    document.getElementById("statusBar").textContent = "分析完成";
   } catch (e) {
-    document.getElementById('statusBar').textContent = '出错: ' + e.message;
+    document.getElementById("statusBar").textContent = "出错: " + e.message;
   } finally {
-    document.getElementById('loader').classList.remove('active');
-    document.getElementById('results').classList.remove('hidden');
+    document.getElementById("loader").classList.remove("active");
+    document.getElementById("results").classList.remove("hidden");
   }
 }
 
 function render(data) {
-  const cards = document.getElementById('cards');
-  const hasSignal = data.current_signals.length > 0;
-  const signalNames = data.current_signals.map(s => {
-    const sig = data.signals.find(d => d.key === s);
-    return sig ? sig.name : s;
-  }).join(', ');
+  const a = data.analysis;
 
-  cards.innerHTML = `
-    <div class="card">
-      <div class="label">最新收盘价</div>
-      <div class="value">${data.latest_close.toFixed(2)}</div>
-      <div class="sub">${data.data_end}</div>
+  // 卡片
+  let trendClass = a.overall_trend.includes("上升") ? "bullish" : a.overall_trend.includes("下降") ? "bearish" : "";
+  let alignClass = a.ma_alignment.alignment.includes("多头") ? "bullish" : a.ma_alignment.alignment.includes("空头") ? "bearish" : "";
+  document.getElementById("cards").innerHTML = `
+    <div class="card ${trendClass}">
+      <div class="label">整体趋势</div>
+      <div class="value" style="font-size:20px">${a.overall_trend}</div>
+    </div>
+    <div class="card ${alignClass}">
+      <div class="label">均线排列</div>
+      <div class="value" style="font-size:18px">${a.ma_alignment.alignment}</div>
+      <div class="sub">${a.ma_alignment.detail}</div>
     </div>
     <div class="card">
-      <div class="label">当前信号</div>
-      <div class="value" style="font-size:18px">${hasSignal ? signalNames : '无信号'}</div>
-      <div class="sub">${hasSignal ? data.current_signals.length + ' 个信号触发' : ''}</div>
-    </div>
-    <div class="card">
-      <div class="label">数据范围</div>
-      <div class="value" style="font-size:16px">${data.records} 条</div>
-      <div class="sub">${data.data_start} ~ ${data.data_end}</div>
+      <div class="label">最新收盘</div>
+      <div class="value">${a.latest_close}</div>
+      <div class="sub">${a.latest_date}</div>
     </div>
   `;
 
-  const banner = document.getElementById('banner');
-  const ov = data.overall;
-  let verdictClass = 'neutral';
-  if (ov.bullish_count > ov.bearish_count) verdictClass = 'bullish';
-  else if (ov.bearish_count > ov.bullish_count) verdictClass = 'bearish';
-  banner.innerHTML = `
-    <span class="verdict ${verdictClass}">${ov.verdict}</span>
-    <span class="meta">偏多 ${ov.bullish_count} / 偏空 ${ov.bearish_count} &middot; 历史样本 ${ov.total_samples} 次</span>
+  // 斜率
+  let slopeHtml = "";
+  for (const [name, info] of Object.entries(a.slopes)) {
+    let dirClass = info.direction === "上升" ? "up" : info.direction === "下降" ? "down" : "flat";
+    let symbol = info.direction === "上升" ? "↑" : info.direction === "下降" ? "↓" : "→";
+    slopeHtml += `
+      <div class="slope-row">
+        <span class="name">${name}</span>
+        <span>${info.value}</span>
+        <span>${info.slope}% ${symbol}</span>
+        <span class="dir ${dirClass}">${info.direction}</span>
+      </div>`;
+  }
+  document.getElementById("slopeContent").innerHTML = slopeHtml;
+
+  // 支撑压力
+  const sr = a.support_resistance;
+  document.getElementById("srContent").innerHTML = `
+    <div class="sr-row"><span>当前价</span><strong>${sr.current}</strong></div>
+    <div class="sr-row"><span>支撑位</span><span style="color:#4caf50">${sr.support} (${sr.pct_to_support}%)</span></div>
+    <div class="sr-row"><span>压力位</span><span style="color:#ef5350">${sr.resistance} (+${sr.pct_to_resistance}%)</span></div>
   `;
 
-  const tbody = document.querySelector('#signalTable tbody');
-  tbody.innerHTML = '';
-  data.signals.forEach(s => {
-    const f5 = s.forward['5d'] || {};
-    const f10 = s.forward['10d'] || {};
-    const isCurrent = data.current_signals.includes(s.key);
-    const win5 = f5.win_rate || 0;
-    const avg5 = f5.avg_ret || 0;
+  // 交叉
+  let crossHtml = "";
+  if (a.crosses.length > 0) {
+    a.crosses.slice(-5).reverse().forEach(c => {
+      crossHtml += `
+        <div class="cross-item">
+          <span>${c.date}</span>
+          <span class="${c.type === '金叉' ? 'gold' : 'dead'}">${c.type}</span>
+          <span>${c.ma1} x ${c.ma2}</span>
+        </div>`;
+    });
+  } else {
+    crossHtml = '<div class="cross-item">近期无交叉</div>';
+  }
+  document.getElementById("crossContent").innerHTML = crossHtml;
 
-    let cls = 'neutral';
-    if (s.total_occurrences >= 10) {
-      if (win5 >= 60 && avg5 > 0) cls = 'bullish';
-      else if (win5 <= 45 && avg5 < 0) cls = 'bearish';
-    } else {
-      cls = 'insufficient';
-    }
-
-    tbody.innerHTML += `
-      <tr>
-        <td>${s.name}${isCurrent ? '<span class="current-tag">当前触发</span>' : ''}</td>
-        <td>${s.total_occurrences}</td>
-        <td class="${win5 >= 60 ? 'win-high' : win5 <= 45 ? 'win-low' : 'win-mid'}">${win5}%</td>
-        <td class="${avg5 > 0 ? 'win-high' : avg5 < 0 ? 'win-low' : ''}">${avg5 >= 0 ? '+' : ''}${avg5}%</td>
-        <td class="${(f10.win_rate||0) >= 60 ? 'win-high' : (f10.win_rate||0) <= 45 ? 'win-low' : 'win-mid'}">${f10.win_rate || '-'}%</td>
-        <td class="${(f10.avg_ret||0) > 0 ? 'win-high' : (f10.avg_ret||0) < 0 ? 'win-low' : ''}">${f10.avg_ret != null ? ((f10.avg_ret >= 0 ? '+' : '') + f10.avg_ret + '%') : '-'}</td>
-        <td>${f5.max_dd != null ? f5.max_dd + '%' : '-'}</td>
-        <td><span class="badge ${cls}">${s.judge}</span></td>
-      </tr>
-    `;
-  });
-
-  const charts = document.getElementById('charts');
-  let chartHtml = '';
+  // 图表
   if (data.chart_path) {
-    chartHtml += `
-      <div class="chart-box">
-        <h3>K线图与信号标记</h3>
-        <img src="/api/chart?path=${encodeURIComponent(data.chart_path)}" alt="K线图" />
-      </div>`;
+    document.getElementById("chartImg").src = "/api/chart?path=" + encodeURIComponent(data.chart_path);
+    document.getElementById("chartBox").classList.remove("hidden");
   }
-  for (const [key, path] of Object.entries(data.dist_charts || {})) {
-    const sig = data.signals.find(s => s.key === key);
-    const name = sig ? sig.name : key;
-    chartHtml += `
-      <div class="chart-box">
-        <h3>${name} - 未来5日收益分布</h3>
-        <img src="/api/chart?path=${encodeURIComponent(path)}" alt="${name}收益分布" />
-      </div>`;
-  }
-  charts.innerHTML = chartHtml;
 }
 
-loadTickers();
+// 页面加载自动分析
+analyze();
 </script>
 </body>
 </html>

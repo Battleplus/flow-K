@@ -1,93 +1,56 @@
-﻿from flask import Flask, jsonify, request, send_from_directory, send_file
-import sys, os
+﻿"""Flask API + 仪表盘服务端"""
+
+from flask import Flask, jsonify, request, send_from_directory, send_file
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.data_loader import load_raw, load_ticker, list_tickers
-from src.patterns import add_indicators, detect_all, SIGNALS
-from src.stats import compute_forward_returns, all_signal_stats
-from src.chart import plot_kline_with_signals, plot_forward_distribution
-from src.report import _judge_signal, _overall_judgment
+from src.data_loader import fetch_data
+from src.indicators import trend_analysis
+from src.chart import plot_kline_trend
 
-app = Flask(__name__, static_folder=str(ROOT / 'web'), static_url_path='')
+app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    return send_from_directory(str(ROOT / 'web'), 'index.html')
+    return send_from_directory(str(ROOT / "web"), "index.html")
 
-@app.route('/api/chart')
+
+@app.route("/api/chart")
 def api_chart():
-    """Serve generated chart images by absolute path."""
-    path = request.args.get('path', '')
+    path = request.args.get("path", "")
     p = Path(path)
     if not p.exists():
-        return ('Not found', 404)
-    return send_file(str(p), mimetype='image/png')
+        return ("Not found", 404)
+    return send_file(str(p), mimetype="image/png")
 
-@app.route('/api/tickers')
-def api_tickers():
-    raw = load_raw()
-    tickers = list_tickers(raw)
-    return jsonify(tickers)
 
-@app.route('/api/analyze/<ticker>')
+@app.route("/api/analyze/<ticker>")
 def api_analyze(ticker):
-    lookback = request.args.get('lookback', 3.0, type=float)
-    raw = load_raw()
-    df = load_ticker(raw, ticker.upper())
-    df = df[df['Date'] >= df['Date'].max() - pd.Timedelta(days=int(lookback * 365))].copy()
-    
-    df = add_indicators(df)
-    df = detect_all(df)
-    df = compute_forward_returns(df)
-    
-    all_stats = all_signal_stats(df)
-    latest = df.iloc[-1]
-    
-    current_signals = []
-    for key in SIGNALS:
-        col = f'signal_{key}'
-        if col in df.columns and latest[col] == 1:
-            current_signals.append(key)
-    
-    overall = _overall_judgment(all_stats)
-    
-    signal_details = []
-    for key, (name, _) in SIGNALS.items():
-        s = all_stats.get(key, {})
-        judge = _judge_signal(s)
-        signal_details.append({
-            'key': key,
-            'name': name,
-            'total_occurrences': s.get('total_occurrences', 0),
-            'judge': judge,
-            'forward': s.get('forward', {}),
+    period = request.args.get("period", "1y")
+    try:
+        df = fetch_data(ticker, period=period)
+        analysis = trend_analysis(df)
+        chart_path = plot_kline_trend(df, ticker, analysis)
+        return jsonify({
+            "ticker": ticker.upper(),
+            "period": period,
+            "data_start": str(df["Date"].min()),
+            "data_end": str(df["Date"].max()),
+            "records": len(df),
+            "analysis": analysis,
+            "chart_path": chart_path,
         })
-    
-    chart_path = plot_kline_with_signals(df, ticker.upper(), signal_cols=[f'signal_{k}' for k in SIGNALS])
-    dist_charts = {}
-    for key in SIGNALS:
-        p = plot_forward_distribution(df, f'signal_{key}', ticker.upper(), forward_n=5)
-        if p:
-            dist_charts[key] = p
-    
-    return jsonify({
-        'ticker': ticker.upper(),
-        'data_start': str(df['Date'].min().date()),
-        'data_end': str(df['Date'].max().date()),
-        'records': len(df),
-        'latest_close': float(latest['Adj Close']),
-        'current_signals': current_signals,
-        'overall': overall,
-        'signals': signal_details,
-        'chart_path': chart_path,
-        'dist_charts': dist_charts,
-    })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    import pandas as pd
-    print('Starting K-line Strategy Dashboard...')
-    print('Open http://localhost:5000 in your browser')
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+if __name__ == "__main__":
+    print("Starting K-line Trend Dashboard...")
+    print("Open http://localhost:5000 in your browser")
+    app.run(host="0.0.0.0", port=5000, debug=True)
