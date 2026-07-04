@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FLOW AI · 多因子策略引擎</title>
+<script type="text/javascript" src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#2d3436;line-height:1.6}
@@ -85,6 +86,15 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .strat-rank.gold{background:#f39c12}
 .strat-rank.silver{background:#95a5a6}
 .strat-rank.bronze{background:#e67e22}
+.strategy-reco{border:1px solid rgba(41,98,255,.35);background:#151a25;border-radius:4px;padding:9px;margin-bottom:8px;color:#d1d4dc}
+.strategy-reco .topline{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px}
+.strategy-reco strong{color:#f0f3fa;font-size:13px}
+.strategy-reco .score-pill{font-size:11px;color:#fff;background:#2962ff;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.strategy-reco .reason{font-size:11px;color:#9aa4b2;margin-top:5px;line-height:1.5}
+.risk-pill{font-size:10px;border-radius:999px;padding:1px 7px;font-weight:700;white-space:nowrap}
+.risk-pill.low{background:rgba(38,166,154,.16);color:#26a69a}
+.risk-pill.mid{background:rgba(245,197,66,.16);color:#f5c542}
+.risk-pill.high{background:rgba(239,83,80,.16);color:#ef5350}
 
 /* 共识卡片 */
 .consensus-banner{padding:10px 14px;border-radius:8px;font-size:13px;font-weight:600;text-align:center;margin-bottom:8px}
@@ -145,6 +155,156 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 .spinner{display:inline-block;width:30px;height:30px;border:3px solid #e0e0e0;border-top-color:#0984e3;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .hidden{display:none}
+
+/* TradingView-inspired workspace */
+:root{
+  --tv-bg:#0f131a;
+  --tv-panel:#131722;
+  --tv-panel-2:#171b26;
+  --tv-border:#2a2e39;
+  --tv-grid:#242833;
+  --tv-text:#d1d4dc;
+  --tv-muted:#787b86;
+  --tv-blue:#2962ff;
+  --tv-up:#26a69a;
+  --tv-down:#ef5350;
+  --tv-yellow:#f5c542;
+  --tv-purple:#b388ff;
+}
+body{background:var(--tv-bg);color:var(--tv-text);line-height:1.45}
+header{background:var(--tv-panel);border-bottom:1px solid var(--tv-border);padding:8px 14px;gap:14px}
+header h1{font-size:15px;letter-spacing:0;color:#f0f3fa}
+main{max-width:none;padding:10px 12px}
+.toolbar{gap:6px}
+.toolbar input,.toolbar select,.toolbar button,.toolbar .mode-btn,#tickerInput,#holdSelect,#searchType{
+  background:var(--tv-panel-2)!important;border:1px solid var(--tv-border)!important;color:var(--tv-text)!important;border-radius:4px!important;box-shadow:none!important
+}
+.toolbar button,.toolbar .mode-btn.active,.tabs button.active{background:var(--tv-blue)!important;border-color:var(--tv-blue)!important;color:#fff!important}
+.toolbar button:hover{filter:brightness(1.08)}
+.toolbar .mode-btn{color:#9db2ff!important;background:transparent!important}
+.toolbar .status{color:var(--tv-muted)}
+.loader{color:var(--tv-muted)}
+.cards{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+.card,.panel,.quote-bar,.chart-box{
+  background:var(--tv-panel);border:1px solid var(--tv-border);border-radius:4px;box-shadow:none;color:var(--tv-text)
+}
+.card{padding:9px 12px;min-width:0}
+.card .label{color:var(--tv-muted);letter-spacing:.2px}
+.card .value{color:#f0f3fa}
+.card .sub{color:var(--tv-muted)}
+.content{grid-template-columns:minmax(0,1fr) 380px;gap:10px}
+.sidebar{gap:10px}
+.panel{padding:10px}
+.panel h3{color:#f0f3fa;border-bottom:1px solid var(--tv-border)}
+.tabs{gap:2px}
+.tabs button{background:transparent;border:1px solid transparent;color:var(--tv-muted);border-radius:4px!important;padding:6px 10px}
+.tabs button:hover{background:#1f2430;color:var(--tv-text)}
+.tab-content{margin-top:8px}
+.chart-box{padding:0;overflow:hidden;margin-top:10px}
+.chart-box>.tabs{height:38px;align-items:center;padding:0 8px;border-bottom:1px solid var(--tv-border);background:var(--tv-panel)}
+.quote-bar{padding:8px 10px;margin-bottom:8px}
+.quote-info,.market-mini .idx-name,.factor-cat{color:var(--tv-muted)}
+.quote-change.up,.dir.up,.sig-badge.bullish,.strat-signal.buy{background:rgba(38,166,154,.12);color:var(--tv-up)}
+.quote-change.down,.dir.down,.sig-badge.bearish,.strat-signal.sell{background:rgba(239,83,80,.12);color:var(--tv-down)}
+.signal-item,.slope-row,.market-mini .idx-row,.strat-table td,.portfolio-table td,.factor-table td{border-bottom:1px solid var(--tv-border)}
+.strat-table th,.portfolio-table th,.factor-table th{background:#1b202b;color:var(--tv-muted)}
+.strat-table tr:hover{background:#1a2030}
+.regime-card{background:#151c2e;border-color:#2d4b9f}
+.regime-card .title{color:#f0f3fa}
+.regime-card .desc{color:#b2b5be}
+.portfolio-table tr[style],.portfolio-table tr[style*="background"]{background:#171b26!important}
+.score-bar-wrap,.consensus-bar{background:#252a35}
+.consensus-banner{border-radius:4px}
+.consensus-banner.strong-bull,.consensus-banner.bull{background:rgba(38,166,154,.12);color:var(--tv-up);border-color:rgba(38,166,154,.45)}
+.consensus-banner.strong-bear,.consensus-banner.bear{background:rgba(239,83,80,.12);color:var(--tv-down);border-color:rgba(239,83,80,.45)}
+.idx-up,.strat-table .green,.portfolio-table .positive{color:var(--tv-up)}
+.idx-down,.strat-table .red,.portfolio-table .negative{color:var(--tv-down)}
+.pos{color:var(--tv-up)!important}.neg{color:var(--tv-down)!important}
+.portfolio-img,.chart-box img{border-radius:0;background:var(--tv-panel)}
+
+.tv-chart-shell{position:relative;min-height:620px;background:var(--tv-panel);overflow:hidden}
+.tv-chart-topbar{height:40px;display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid var(--tv-border);white-space:nowrap;overflow:hidden}
+.tv-symbol{display:flex;align-items:baseline;gap:8px;min-width:0}
+.tv-symbol strong{font-size:15px;color:#f0f3fa}
+.tv-symbol span{font-size:12px;color:var(--tv-muted)}
+.tv-ohlc{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--tv-muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tv-ohlc.up{color:var(--tv-up)}
+.tv-ohlc.down{color:var(--tv-down)}
+.tv-ma-legend{display:flex;gap:10px;margin-left:auto;font-size:11px;color:var(--tv-muted)}
+.tv-ma{display:inline-flex;align-items:center;gap:4px}
+.tv-ma:before{content:"";width:8px;height:2px;border-radius:2px;background:currentColor}
+.tv-ma.ma5{color:#f5c542}.tv-ma.ma10{color:#42a5f5}.tv-ma.ma20{color:#b388ff}.tv-ma.ma60{color:#ff8a65}
+.tv-ma.buy{color:var(--tv-up)}.tv-ma.sell{color:var(--tv-down)}
+.chart-tool-rail{position:absolute;top:40px;bottom:0;left:0;width:42px;border-right:1px solid var(--tv-border);background:rgba(15,19,26,.72);z-index:2;display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:6px}
+.chart-tool-rail button{width:28px;height:28px;border:1px solid transparent;border-radius:4px;background:transparent;color:#9aa4b2;font-size:15px;line-height:1;cursor:pointer}
+.chart-tool-rail button:hover{background:#1f2430;border-color:#343946;color:#f0f3fa}
+.chart-tool-divider{width:20px;height:1px;background:var(--tv-border);margin:2px 0}
+.tv-chart{height:580px;width:calc(100% - 42px);margin-left:42px}
+.tv-loading{position:absolute;inset:40px 0 0;display:flex;align-items:center;justify-content:center;color:var(--tv-muted);font-size:13px;background:rgba(19,23,34,.78);z-index:3}
+.tv-loading.hidden{display:none}
+.tv-attribution{position:absolute;right:10px;bottom:6px;z-index:2;font-size:10px;color:#5f6472;pointer-events:none}
+.tv-attribution a{color:#6f87ff;text-decoration:none;pointer-events:auto}
+.static-chart-fallback{padding:0;background:var(--tv-panel)}
+.static-chart-fallback img{display:block;width:100%}
+.tv-chart-shell.fallback .tv-chart,.tv-chart-shell.fallback .tv-attribution{display:none}
+.tv-chart-shell.fallback .tv-loading{display:none}
+.research-panel{background:var(--tv-panel);padding:12px;min-height:580px}
+.ai-cockpit-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:10px}
+.ai-block,.portfolio-block{background:linear-gradient(180deg,rgba(23,27,38,.98),rgba(13,18,28,.96));border:1px solid var(--tv-border);border-radius:4px;padding:12px;min-width:0}
+.ai-block h3,.portfolio-block h3{font-size:13px;color:#f0f3fa;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;border:0;padding:0}
+.ai-subtitle,.lab-subtitle{font-size:11px;color:var(--tv-muted)}
+.ai-heatmap{display:grid;grid-template-columns:repeat(12,1fr);gap:7px;margin:12px 0 8px}
+.ai-dot{width:10px;height:10px;border-radius:50%;background:#5f6472;box-shadow:0 0 0 1px rgba(255,255,255,.04)}
+.ai-dot.bull{background:var(--tv-up)}.ai-dot.bear{background:var(--tv-down)}.ai-dot.neutral{background:#8c929f}
+.factor-bars{display:flex;flex-direction:column;gap:8px}
+.factor-row{display:grid;grid-template-columns:86px 1fr 42px;align-items:center;gap:8px;font-size:12px}
+.factor-row .name{color:#c8ccd6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.factor-row .score{text-align:right;font-variant-numeric:tabular-nums}
+.factor-track{height:8px;background:#252a35;border-radius:999px;position:relative;overflow:hidden}
+.factor-track:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:#3a404d}
+.factor-fill{position:absolute;top:0;bottom:0;border-radius:999px}
+.factor-fill.pos{left:50%;background:var(--tv-up)}
+.factor-fill.neg{right:50%;background:var(--tv-down)}
+.ai-signal-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.ai-signal-row{display:grid;grid-template-columns:1fr 46px 54px;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--tv-border);border-radius:4px;background:#151a25;font-size:12px}
+.ai-signal-row .dir{font-weight:700;text-align:center}
+.ai-signal-row .dir.sell{color:var(--tv-down)}.ai-signal-row .dir.buy{color:var(--tv-up)}
+.confidence-wrap{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+.confidence-ring{width:104px;height:104px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--tv-yellow) calc(var(--score)*1%),#26303d 0);position:relative}
+.confidence-ring:before{content:"";position:absolute;inset:12px;border-radius:50%;background:var(--tv-panel)}
+.confidence-ring strong{position:relative;font-size:26px;color:#f0f3fa}
+.confidence-ring span{position:relative;font-size:11px;color:var(--tv-yellow);grid-column:1}
+.ai-explain{font-size:12px;color:#b8bdc8;line-height:1.7}
+.ai-decision{display:grid;grid-template-columns:1fr;gap:8px}
+.ai-decision-card{border:1px solid var(--tv-border);border-radius:4px;background:#151a25;padding:9px}
+.ai-decision-card .k{font-size:11px;color:var(--tv-muted);margin-bottom:4px}
+.ai-decision-card .v{font-size:13px;color:#f0f3fa;line-height:1.55}
+.ai-evidence-list{display:grid;gap:6px;margin-top:8px}
+.ai-evidence-list div{display:flex;justify-content:space-between;gap:10px;border-top:1px solid var(--tv-border);padding-top:6px;font-size:12px;color:#b8bdc8}
+.ai-evidence-list span{color:var(--tv-muted)}
+.portfolio-lab{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:10px}
+.portfolio-lab>div{min-width:0}
+.lab-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.lab-metric{border:1px solid var(--tv-border);border-radius:4px;padding:9px;background:#151a25}
+.lab-metric .label{font-size:11px;color:var(--tv-muted)}
+.lab-metric .value{font-size:18px;font-weight:800;color:#f0f3fa;margin-top:4px}
+.lab-metric .value.pos{color:var(--tv-up)}.lab-metric .value.neg{color:var(--tv-down)}
+.portfolio-lab .portfolio-img{margin:0;border:1px solid var(--tv-border)}
+.lab-equity-chart{height:300px;border:1px solid var(--tv-border);border-radius:4px;overflow:hidden;background:var(--tv-panel)}
+.allocation-list{display:flex;flex-direction:column;gap:8px}
+.allocation-row{display:grid;grid-template-columns:1fr 120px 42px;align-items:center;gap:8px;font-size:12px}
+.allocation-bar{height:8px;background:#252a35;border-radius:999px;overflow:hidden}
+.allocation-bar span{display:block;height:100%;background:var(--tv-blue);border-radius:999px}
+.method-table{width:100%;border-collapse:collapse;font-size:12px}
+.method-table th,.method-table td{padding:7px 6px;border-bottom:1px solid var(--tv-border);text-align:left}
+.method-table th{color:var(--tv-muted);font-size:11px;background:#1b202b}
+.risk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.risk-item{border:1px solid var(--tv-border);border-radius:4px;padding:8px;background:#151a25;font-size:12px;display:flex;justify-content:space-between}
+.intraday-chart{background:var(--tv-panel);color:var(--tv-muted);border:1px solid var(--tv-border)}
+.intraday-controls button{background:#171b26;border-color:var(--tv-border);color:var(--tv-muted)}
+.intraday-controls button.active{background:var(--tv-blue);color:#fff;border-color:var(--tv-blue)}
+@media(max-width:1200px){.content{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.tv-chart-shell{min-height:500px}.tv-chart{height:460px}.ai-cockpit-grid,.portfolio-lab{grid-template-columns:1fr}.lab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){main{padding:8px}.cards{grid-template-columns:1fr}.quote-bar{display:grid;grid-template-columns:auto 1fr auto;align-items:center}.quote-bar .quote-info{grid-column:1/-1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.quote-bar .quote-info[style]{margin-left:0!important}.chart-box>.tabs{overflow-x:auto}.chart-tool-rail{display:none}.tv-chart{width:100%;margin-left:0}.tv-chart-topbar{height:auto;min-height:48px;align-items:flex-start;flex-direction:column;gap:4px;padding:6px 10px}.tv-ma-legend{margin-left:0}.tv-chart{height:420px}.tv-loading{inset:78px 0 0}.ai-cockpit-grid,.portfolio-lab{grid-template-columns:1fr}.confidence-wrap{grid-template-columns:1fr}.lab-metrics{grid-template-columns:1fr}.allocation-row{grid-template-columns:1fr 90px 38px}}
 </style>
 </head>
 <body>
@@ -200,20 +360,59 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
       <div id="consensusBanner" style="margin-bottom:12px"></div>
       <div class="chart-box">
         <div class="tabs" style="margin-bottom:8px">
-          <button class="active" onclick="switchChartTab('factor')">因子图表</button>
+          <button class="active" onclick="switchChartTab('factor')">K线图表</button>
+          <button onclick="switchChartTab('ai')">AI策略解释</button>
+          <button onclick="switchChartTab('portfolio')">组合研究</button>
           <button onclick="switchChartTab('strategy')">策略信号图</button>
-          <button onclick="switchChartTab('portfolio')">组合权益图</button>
           <button onclick="switchChartTab('intraday')">日内走势</button>
         </div>
         <div class="tab-content active" id="tab-chart-factor">
-          <img id="chartImg" src="" alt="图表" style="width:100%;border-radius:4px" />
+          <div class="tv-chart-shell" id="tvChartShell">
+            <div class="tv-chart-topbar">
+              <div class="tv-symbol"><strong id="tvSymbol">NVDA</strong><span id="tvMeta">1年 · 日线</span></div>
+              <div class="tv-ohlc" id="tvOhlc">O -- H -- L -- C --</div>
+              <div class="tv-ma-legend">
+                <span class="tv-ma ma5">MA5</span>
+                <span class="tv-ma ma10">MA10</span>
+                <span class="tv-ma ma20">MA20</span>
+                <span class="tv-ma ma60">MA60</span>
+                <span class="tv-ma buy">买点</span>
+                <span class="tv-ma sell">卖点</span>
+              </div>
+            </div>
+            <div class="chart-tool-rail" aria-label="图表工具">
+              <button title="十字光标">＋</button>
+              <button title="趋势线">／</button>
+              <button title="水平线">＝</button>
+              <button title="画笔">⌁</button>
+              <button title="文字">T</button>
+              <div class="chart-tool-divider"></div>
+              <button title="缩放">⌕</button>
+              <button title="磁吸">⌒</button>
+              <button title="锁定">□</button>
+            </div>
+            <div class="tv-chart" id="tvChart"></div>
+            <div class="tv-loading" id="tvChartLoading">加载图表...</div>
+            <div class="tv-attribution">Lightweight Charts™ by <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a></div>
+            <div class="static-chart-fallback hidden" id="staticChartFallback">
+              <img id="chartImg" src="" alt="图表" />
+            </div>
+          </div>
+        </div>
+        <div class="tab-content" id="tab-chart-ai">
+          <div class="research-panel" id="aiCockpitContent">
+            <div style="color:#787b86;font-size:13px">加载 AI 策略解释...</div>
+          </div>
         </div>
         <div class="tab-content" id="tab-chart-strategy" style="text-align:center;padding:20px;color:#888">
           点击生成策略信号图
           <br><button onclick="genStrategyChart()" style="margin-top:10px;padding:8px 20px;font-size:13px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer">生成</button>
         </div>
         <div class="tab-content" id="tab-chart-portfolio">
-          <img id="portfolioChartImg" src="" alt="组合权益图" style="width:100%;border-radius:4px" />
+          <div class="research-panel" id="portfolioLabContent">
+            <div style="color:#787b86;font-size:13px">加载组合研究...</div>
+          </div>
+          <img id="portfolioChartImg" class="hidden" src="" alt="组合权益图" />
         </div>
         <div class="tab-content" id="tab-chart-intraday">
           <div class="intraday-controls">
@@ -312,6 +511,602 @@ main{max-width:1600px;margin:0 auto;padding:16px 24px}
 let currentMode = "multi";
 let currentTicker = "";
 let strategyData = null;
+let tvChartState = { chart: null, resizeObserver: null };
+let portfolioChartState = { chart: null, resizeObserver: null, resizeFrame: null, width: 0, height: 0 };
+
+const TV_PERIOD_LABELS = { "1mo": "1个月", "3mo": "3个月", "6mo": "6个月", "1y": "1年", "2y": "2年", "5y": "5年", "max": "全部" };
+const TV_COLORS = {
+  bg: "#131722",
+  panel: "#171b26",
+  text: "#d1d4dc",
+  muted: "#787b86",
+  grid: "#242833",
+  up: "#26a69a",
+  down: "#ef5350",
+  blue: "#2962ff",
+  ma5: "#f5c542",
+  ma10: "#42a5f5",
+  ma20: "#b388ff",
+  ma60: "#ff8a65",
+};
+const INITIAL_CHART_VIEW = new URLSearchParams(location.search).get("view");
+const CHART_TABS = ["factor","ai","portfolio","strategy","intraday"];
+
+function formatPrice(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "--";
+  return n >= 100 ? n.toFixed(2) : n.toFixed(3);
+}
+
+function formatVolume(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "--";
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return String(Math.round(n));
+}
+
+function asNumber(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const cleaned = String(value).replace(/[%+,]/g, "").trim();
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function pctClass(value) {
+  const n = asNumber(value);
+  return n > 0 ? "pos" : n < 0 ? "neg" : "";
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getTopStrategy(btData) {
+  const ranked = btData && (btData.ranked_by_score || btData.ranked_by_sharpe) || [];
+  const sid = ranked[0];
+  return sid && btData.strategies ? btData.strategies[sid] : null;
+}
+
+function riskClass(level) {
+  if (level === "低") return "low";
+  if (level === "中") return "mid";
+  return "high";
+}
+
+function buildAiNarrative(data, btData, consData) {
+  const cons = consData.consensus || {};
+  const active = cons.active_strategies || {};
+  const top = getTopStrategy(btData);
+  const sr = data.analysis && data.analysis.support_resistance || {};
+  const activeNames = Object.values(active).slice(0, 3).map(s => s.name).join("、") || "暂无活跃策略";
+  const support = sr.support || "--";
+  const resistance = sr.resistance || "--";
+  const verdict = cons.consensus || data.signals.verdict || "中性";
+  const score = cons.aggregate_score ?? data.signals.score ?? 0;
+  const rec = btData.recommendation || {};
+  const riskText = top && top.risk_level ? `${top.risk_level}风险` : "风险待确认";
+  const conclusion = `${data.ticker} 当前为 ${verdict}，综合评分 ${score}；主参考策略为 ${top ? top.name : "--"}。`;
+  const action = rec.reason || (top ? top.recommendation_reason : "当前策略样本不足，建议等待更多确认。");
+  return {
+    conclusion,
+    action,
+    risk: `价格位于支撑 ${support} 与压力 ${resistance} 区间；主策略为${riskText}，若跌破支撑或共识转弱，应降低该策略权重。`,
+    evidence: [
+      ["活跃策略", activeNames],
+      ["推荐评分", rec.score ? `${rec.score}/100 · ${rec.grade || "--"}级` : `${top ? top.quality_score : "--"}/100`],
+      ["支撑/压力", `${support} / ${resistance}`],
+    ],
+  };
+}
+
+function renderAiDecision(narrative) {
+  return `<div class="ai-decision">
+    <div class="ai-decision-card">
+      <div class="k">结论</div>
+      <div class="v">${narrative.conclusion}</div>
+    </div>
+    <div class="ai-decision-card">
+      <div class="k">证据</div>
+      <div class="v">${narrative.action}</div>
+      <div class="ai-evidence-list">${narrative.evidence.map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join("")}</div>
+    </div>
+    <div class="ai-decision-card">
+      <div class="k">风险</div>
+      <div class="v">${narrative.risk}</div>
+    </div>
+  </div>`;
+}
+
+function makeFactorContributions(factors, data, consData) {
+  const f = factors || {};
+  const signalScore = asNumber(data.signals && data.signals.score);
+  const consensusScore = asNumber(consData.consensus && consData.consensus.aggregate_score);
+  const value = key => f[key] ? asNumber(f[key].value) : 0;
+  return [
+    { name: "动量反转", score: clamp((50 - value("rsi_14")) / 12 + signalScore * .18, -3, 3) },
+    { name: "波动率", score: clamp((value("bb_squeeze_rank") - .5) * -3 + consensusScore * .08, -3, 3) },
+    { name: "均值回归", score: clamp(-value("ma_distance") / 4, -3, 3) },
+    { name: "趋势强度", score: clamp(value("ma_ribbon_score") / 1.6 + value("trend_slope_ma20") / 2, -3, 3) },
+    { name: "成交量", score: clamp((value("volume_ratio") - 1) * .9 - (value("volume_divergence_bear") ? 1.2 : 0), -3, 3) },
+    { name: "技术形态", score: clamp(signalScore / 2.2, -3, 3) },
+    { name: "策略共识", score: clamp(consensusScore / 4, -3, 3) },
+  ];
+}
+
+function renderFactorBars(items) {
+  return `<div class="factor-bars">${items.map(item => {
+    const score = clamp(item.score, -3, 3);
+    const width = Math.abs(score) / 3 * 50;
+    const cls = score >= 0 ? "pos" : "neg";
+    return `<div class="factor-row">
+      <span class="name">${item.name}</span>
+      <span class="factor-track"><span class="factor-fill ${cls}" style="width:${width}%"></span></span>
+      <span class="score ${cls}">${score >= 0 ? "+" : ""}${score.toFixed(1)}</span>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function renderConsensusHeatmap(consData) {
+  const trend = (consData.trend || []).slice(-48);
+  if (!trend.length) return '<div class="ai-subtitle">暂无共识趋势</div>';
+  return `<div class="ai-heatmap">${trend.map(p => {
+    const score = asNumber(p.score);
+    const cls = score > 1 ? "bull" : score < -1 ? "bear" : "neutral";
+    return `<span class="ai-dot ${cls}" title="${p.date} · ${score}"></span>`;
+  }).join("")}</div>`;
+}
+
+function renderActiveStrategySignals(consData) {
+  const active = consData.consensus && consData.consensus.active_strategies || {};
+  const rows = Object.values(active).slice(0, 8);
+  if (!rows.length) return '<div class="ai-subtitle">当前没有活跃策略信号</div>';
+  return `<div class="ai-signal-list">${rows.map(info => {
+    const sig = asNumber(info.signal);
+    const isBuy = sig > 0;
+    const dir = sig >= 2 ? "强买" : sig === 1 ? "买入" : sig <= -2 ? "强卖" : "卖出";
+    return `<div class="ai-signal-row">
+      <span>${info.name}</span>
+      <span class="dir ${isBuy ? "buy" : "sell"}">${dir}</span>
+      <span class="ai-subtitle">${info.category || ""}</span>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function renderAiCockpit(data, btData, consData, factorData = null) {
+  const target = document.getElementById("aiCockpitContent");
+  if (!target) return;
+  const cons = consData.consensus || {};
+  const confidence = clamp(Math.round(44 + Math.abs(asNumber(cons.aggregate_score || data.signals.score)) * 2.8), 36, 76);
+  const top = getTopStrategy(btData);
+  const factors = factorData && factorData.factors || {};
+  const contributions = makeFactorContributions(factors, data, consData);
+  const narrative = buildAiNarrative(data, btData, consData);
+  target.innerHTML = `
+    <div class="ai-cockpit-grid">
+      <div class="ai-block">
+        <h3>AI策略解释 <span class="ai-subtitle">${data.ticker} · ${data.period}</span></h3>
+        <div class="confidence-wrap">
+          <div class="confidence-ring" style="--score:${confidence}"><strong>${confidence}%</strong></div>
+          ${renderAiDecision(narrative)}
+        </div>
+      </div>
+      <div class="ai-block">
+        <h3>活跃信号 <span class="ai-subtitle">${Object.keys(cons.active_strategies || {}).length} 个</span></h3>
+        ${renderActiveStrategySignals(consData)}
+      </div>
+      <div class="ai-block">
+        <h3>多策略共识时间线 <span class="ai-subtitle">近 48 个交易点</span></h3>
+        ${renderConsensusHeatmap(consData)}
+        <div style="display:flex;gap:14px;font-size:11px;color:var(--tv-muted);margin-top:8px">
+          <span><i class="ai-dot bull" style="display:inline-block;vertical-align:-1px"></i> 偏多</span>
+          <span><i class="ai-dot neutral" style="display:inline-block;vertical-align:-1px"></i> 中性</span>
+          <span><i class="ai-dot bear" style="display:inline-block;vertical-align:-1px"></i> 偏空</span>
+        </div>
+      </div>
+      <div class="ai-block">
+        <h3>因子贡献 <span class="ai-subtitle">解释性评分</span></h3>
+        ${renderFactorBars(contributions)}
+      </div>
+      <div class="ai-block" style="grid-column:1/-1">
+        <h3>策略表现 <span class="ai-subtitle">当前最佳：${top ? top.name : "--"}</span></h3>
+        ${renderStrategyMiniTable(btData)}
+      </div>
+    </div>
+  `;
+}
+
+function renderStrategyMiniTable(btData) {
+  const ranked = btData.ranked_by_score || btData.ranked_by_sharpe || [];
+  const strategies = btData.strategies || {};
+  if (!ranked.length) return '<div class="ai-subtitle">暂无策略回测数据</div>';
+  return `<table class="method-table"><tr><th>#</th><th>策略</th><th>评分</th><th>收益</th><th>回撤</th><th>风险</th><th>交易</th></tr>
+    ${ranked.slice(0, 8).map((sid, i) => {
+      const s = strategies[sid] || {};
+      return `<tr>
+        <td>${i + 1}</td><td>${s.name || sid}</td>
+        <td>${s.quality_score ?? "--"}</td>
+        <td class="${pctClass(s.total_return)}">${s.total_return || "--"}</td>
+        <td class="neg">${s.max_drawdown || "--"}</td>
+        <td><span class="risk-pill ${riskClass(s.risk_level)}">${s.risk_level || "--"}</span></td>
+        <td>${s.total_trades ?? "--"}</td>
+      </tr>`;
+    }).join("")}
+  </table>`;
+}
+
+function clearTradingChart() {
+  if (tvChartState.resizeObserver) {
+    tvChartState.resizeObserver.disconnect();
+    tvChartState.resizeObserver = null;
+  }
+  if (tvChartState.chart) {
+    tvChartState.chart.remove();
+    tvChartState.chart = null;
+  }
+  const el = document.getElementById("tvChart");
+  if (el) el.innerHTML = "";
+}
+
+function clearPortfolioEquityChart() {
+  if (portfolioChartState.resizeObserver) {
+    portfolioChartState.resizeObserver.disconnect();
+    portfolioChartState.resizeObserver = null;
+  }
+  if (portfolioChartState.resizeFrame) {
+    cancelAnimationFrame(portfolioChartState.resizeFrame);
+    portfolioChartState.resizeFrame = null;
+  }
+  if (portfolioChartState.chart) {
+    portfolioChartState.chart.remove();
+    portfolioChartState.chart = null;
+  }
+  portfolioChartState.width = 0;
+  portfolioChartState.height = 0;
+  const el = document.getElementById("portfolioEquityChart");
+  if (el) el.innerHTML = "";
+}
+
+function resizePortfolioEquityChart() {
+  const el = document.getElementById("portfolioEquityChart");
+  if (!portfolioChartState.chart || !el) return;
+  const rect = el.getBoundingClientRect();
+  const width = Math.max(320, Math.floor(rect.width));
+  const height = Math.max(260, Math.floor(rect.height));
+  if (width === portfolioChartState.width && height === portfolioChartState.height) return;
+  portfolioChartState.width = width;
+  portfolioChartState.height = height;
+  portfolioChartState.chart.resize(width, height);
+}
+
+function schedulePortfolioEquityResize() {
+  if (portfolioChartState.resizeFrame) return;
+  portfolioChartState.resizeFrame = requestAnimationFrame(() => {
+    portfolioChartState.resizeFrame = null;
+    resizePortfolioEquityChart();
+  });
+}
+
+function renderPortfolioEquityChart(data) {
+  const el = document.getElementById("portfolioEquityChart");
+  if (!el) return;
+  const rows = data && data.equity_curve || [];
+  if (!window.LightweightCharts || !LightweightCharts.createChart || !rows.length) {
+    el.innerHTML = '<div class="intraday-chart">组合权益曲线暂无可交互数据</div>';
+    return;
+  }
+
+  clearPortfolioEquityChart();
+  const { createChart, LineSeries, AreaSeries } = LightweightCharts;
+  const ColorType = LightweightCharts.ColorType || { Solid: "solid" };
+  const CrosshairMode = LightweightCharts.CrosshairMode || { Normal: 0 };
+  const chart = createChart(el, {
+    layout: {
+      background: { type: ColorType.Solid, color: TV_COLORS.bg },
+      textColor: TV_COLORS.text,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
+    grid: {
+      vertLines: { color: TV_COLORS.grid },
+      horzLines: { color: TV_COLORS.grid },
+    },
+    rightPriceScale: {
+      borderColor: "#2a2e39",
+      textColor: TV_COLORS.muted,
+      scaleMargins: { top: 0.08, bottom: 0.18 },
+    },
+    timeScale: {
+      borderColor: "#2a2e39",
+      timeVisible: true,
+      secondsVisible: false,
+      rightOffset: 8,
+      barSpacing: 7,
+    },
+    crosshair: {
+      mode: CrosshairMode.Normal,
+      vertLine: { color: "#758696", labelBackgroundColor: "#2a2e39" },
+      horzLine: { color: "#758696", labelBackgroundColor: "#2a2e39" },
+    },
+    localization: {
+      priceFormatter: value => `${((value - 1) * 100).toFixed(1)}%`,
+    },
+  });
+  portfolioChartState.chart = chart;
+
+  const portfolioLine = chart.addSeries(LineSeries, {
+    color: TV_COLORS.blue,
+    lineWidth: 2,
+    title: "等权Top5",
+    lastValueVisible: true,
+    priceLineVisible: false,
+  });
+  portfolioLine.setData(rows.map(r => ({ time: r.date, value: Number(r.portfolio) })));
+
+  const buyHoldLine = chart.addSeries(LineSeries, {
+    color: "#8a9bab",
+    lineWidth: 1,
+    lineStyle: 2,
+    title: "买入持有",
+    lastValueVisible: true,
+    priceLineVisible: false,
+  });
+  buyHoldLine.setData(rows.map(r => ({ time: r.date, value: Number(r.buy_hold) })));
+
+  if (AreaSeries) {
+    const drawdownArea = chart.addSeries(AreaSeries, {
+      color: "rgba(239,83,80,.25)",
+      topColor: "rgba(239,83,80,.18)",
+      bottomColor: "rgba(239,83,80,.02)",
+      lineColor: "rgba(239,83,80,.75)",
+      lineWidth: 1,
+      priceScaleId: "",
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    drawdownArea.priceScale().applyOptions({ scaleMargins: { top: 0.72, bottom: 0.02 } });
+    drawdownArea.setData(rows.map(r => ({ time: r.date, value: Number(r.drawdown) / 100 + 1 })));
+  }
+
+  resizePortfolioEquityChart();
+  chart.timeScale().fitContent();
+  portfolioChartState.resizeObserver = new ResizeObserver(schedulePortfolioEquityResize);
+  portfolioChartState.resizeObserver.observe(el);
+}
+
+function setTradingChartLoading(isLoading) {
+  const loader = document.getElementById("tvChartLoading");
+  if (loader) loader.classList.toggle("hidden", !isLoading);
+}
+
+function setTradingChartFallback(active) {
+  const shell = document.getElementById("tvChartShell");
+  const fallback = document.getElementById("staticChartFallback");
+  if (shell) shell.classList.toggle("fallback", active);
+  if (fallback) fallback.classList.toggle("hidden", !active);
+  setTradingChartLoading(false);
+}
+
+function updateTvOhlc(row) {
+  const el = document.getElementById("tvOhlc");
+  if (!el || !row) return;
+  const prev = Number.isFinite(row.prevClose) ? row.prevClose : row.open;
+  const change = row.close - prev;
+  const pct = prev ? change / prev * 100 : 0;
+  el.classList.toggle("up", change >= 0);
+  el.classList.toggle("down", change < 0);
+  el.innerHTML = `
+    <span>O ${formatPrice(row.open)}</span>
+    <span>H ${formatPrice(row.high)}</span>
+    <span>L ${formatPrice(row.low)}</span>
+    <span>C ${formatPrice(row.close)}</span>
+    <span>${change >= 0 ? "+" : ""}${formatPrice(change)} (${change >= 0 ? "+" : ""}${pct.toFixed(2)}%)</span>
+    <span>Vol ${formatVolume(row.volume)}</span>
+  `;
+}
+
+function resizeTradingChart() {
+  const chartEl = document.getElementById("tvChart");
+  if (!tvChartState.chart || !chartEl) return;
+  const rect = chartEl.getBoundingClientRect();
+  tvChartState.chart.resize(Math.max(320, Math.floor(rect.width)), Math.max(360, Math.floor(rect.height)));
+}
+
+async function renderTradingViewChart(ticker, period, summary, btData = null) {
+  const chartEl = document.getElementById("tvChart");
+  const symbolEl = document.getElementById("tvSymbol");
+  const metaEl = document.getElementById("tvMeta");
+  if (!chartEl || !symbolEl || !metaEl) return;
+
+  symbolEl.textContent = ticker.toUpperCase();
+  metaEl.textContent = `${TV_PERIOD_LABELS[period] || period} · 日线`;
+  setTradingChartFallback(false);
+  setTradingChartLoading(true);
+
+  if (!window.LightweightCharts || !LightweightCharts.createChart) {
+    clearTradingChart();
+    setTradingChartFallback(true);
+    return;
+  }
+
+  try {
+    const fields = "Open,High,Low,Close,Volume,ma5,ma10,ma20,ma60";
+    const res = await fetch(`/api/daily/${ticker}?period=${period}&fields=${fields}`);
+    const payload = await res.json();
+    if (payload.error) throw new Error(payload.error);
+
+    const rows = (payload.data || []).filter(r =>
+      Number.isFinite(Number(r.Open)) &&
+      Number.isFinite(Number(r.High)) &&
+      Number.isFinite(Number(r.Low)) &&
+      Number.isFinite(Number(r.Close))
+    );
+    if (!rows.length) throw new Error("empty chart data");
+
+    clearTradingChart();
+    const { createChart, CandlestickSeries, HistogramSeries, LineSeries } = LightweightCharts;
+    const ColorType = LightweightCharts.ColorType || { Solid: "solid" };
+    const CrosshairMode = LightweightCharts.CrosshairMode || { Normal: 0 };
+    const LineStyle = LightweightCharts.LineStyle || { Dashed: 2 };
+    const chart = createChart(chartEl, {
+      layout: {
+        background: { type: ColorType.Solid, color: TV_COLORS.bg },
+        textColor: TV_COLORS.text,
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      },
+      grid: {
+        vertLines: { color: TV_COLORS.grid },
+        horzLines: { color: TV_COLORS.grid },
+      },
+      rightPriceScale: {
+        borderColor: "#2a2e39",
+        textColor: TV_COLORS.muted,
+        scaleMargins: { top: 0.08, bottom: 0.28 },
+      },
+      timeScale: {
+        borderColor: "#2a2e39",
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 8,
+        barSpacing: 8,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: "#758696", labelBackgroundColor: "#2a2e39", width: 1 },
+        horzLine: { color: "#758696", labelBackgroundColor: "#2a2e39", width: 1 },
+      },
+      localization: {
+        priceFormatter: price => formatPrice(price),
+      },
+      handleScroll: true,
+      handleScale: true,
+    });
+    tvChartState.chart = chart;
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: TV_COLORS.up,
+      downColor: TV_COLORS.down,
+      borderVisible: false,
+      wickUpColor: TV_COLORS.up,
+      wickDownColor: TV_COLORS.down,
+      priceLineColor: TV_COLORS.blue,
+      lastValueVisible: true,
+    });
+
+    const candles = rows.map((r, i) => ({
+      time: r.date,
+      open: Number(r.Open),
+      high: Number(r.High),
+      low: Number(r.Low),
+      close: Number(r.Close),
+      volume: Number(r.Volume || 0),
+      prevClose: i > 0 ? Number(rows[i - 1].Close) : Number(r.Open),
+      ma5: r.ma5 == null ? null : Number(r.ma5),
+      ma10: r.ma10 == null ? null : Number(r.ma10),
+      ma20: r.ma20 == null ? null : Number(r.ma20),
+      ma60: r.ma60 == null ? null : Number(r.ma60),
+    }));
+    candleSeries.setData(candles.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
+    candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.28 } });
+    const candleTimes = new Set(candles.map(c => c.time));
+    const chartMarkers = (btData && btData.signal_markers || [])
+      .filter(m => m && candleTimes.has(m.time))
+      .map(m => ({
+        time: m.time,
+        position: m.position,
+        color: m.color,
+        shape: m.shape,
+        text: m.text,
+      }));
+    if (chartMarkers.length) {
+      if (LightweightCharts.createSeriesMarkers) {
+        LightweightCharts.createSeriesMarkers(candleSeries, chartMarkers);
+      } else if (candleSeries.setMarkers) {
+        candleSeries.setMarkers(chartMarkers);
+      }
+    }
+
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "",
+      lastValueVisible: false,
+      priceLineVisible: false,
+    });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.75, bottom: 0 } });
+    volumeSeries.setData(candles.map(c => ({
+      time: c.time,
+      value: c.volume,
+      color: c.close >= c.prevClose ? "rgba(38,166,154,.42)" : "rgba(239,83,80,.42)",
+    })));
+
+    const maSpecs = [
+      ["ma5", TV_COLORS.ma5],
+      ["ma10", TV_COLORS.ma10],
+      ["ma20", TV_COLORS.ma20],
+      ["ma60", TV_COLORS.ma60],
+    ];
+    maSpecs.forEach(([key, color]) => {
+      const values = candles
+        .filter(c => Number.isFinite(c[key]))
+        .map(c => ({ time: c.time, value: c[key] }));
+      if (!values.length) return;
+      const line = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: key === "ma20" ? 2 : 1,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      line.setData(values);
+    });
+
+    const sr = summary && summary.analysis && summary.analysis.support_resistance || {};
+    [
+      ["support", "支撑", TV_COLORS.up],
+      ["resistance", "压力", TV_COLORS.down],
+    ].forEach(([key, title, color]) => {
+      const price = Number(sr[key]);
+      if (!Number.isFinite(price)) return;
+      candleSeries.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title,
+      });
+    });
+
+    const candleByTime = new Map(candles.map(c => [c.time, c]));
+    updateTvOhlc(candles[candles.length - 1]);
+    chart.subscribeCrosshairMove(param => {
+      if (!param || !param.time) {
+        updateTvOhlc(candles[candles.length - 1]);
+        return;
+      }
+      const key = typeof param.time === "string" ? param.time : `${param.time.year}-${String(param.time.month).padStart(2, "0")}-${String(param.time.day).padStart(2, "0")}`;
+      const row = candleByTime.get(key);
+      updateTvOhlc(row || candles[candles.length - 1]);
+    });
+
+    resizeTradingChart();
+    chart.timeScale().fitContent();
+    if (candles.length > 120) {
+      chart.timeScale().setVisibleLogicalRange({ from: candles.length - 125, to: candles.length + 5 });
+    }
+
+    tvChartState.resizeObserver = new ResizeObserver(resizeTradingChart);
+    tvChartState.resizeObserver.observe(chartEl);
+    setTradingChartLoading(false);
+  } catch (e) {
+    console.error("Trading chart render failed", e);
+    clearTradingChart();
+    setTradingChartFallback(true);
+  }
+}
 
 async function loadTickers() {
   const sel = document.getElementById("tickerInput");
@@ -329,7 +1124,13 @@ async function loadTickers() {
       opt.textContent = `${t.symbol}${t.name ? ' - ' + t.name : ''}${t.sector ? ' / ' + t.sector : ''}`;
       sel.appendChild(opt);
     });
-    if (current && Array.from(sel.options).some(o => o.value === current)) {
+    if (current && !Array.from(sel.options).some(o => o.value === current)) {
+      const opt = document.createElement("option");
+      opt.value = current;
+      opt.textContent = current;
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    if (current) {
       sel.value = current;
     }
   } catch (e) {
@@ -354,9 +1155,12 @@ function switchTab(tab) {
 }
 
 function switchChartTab(tab) {
-  document.querySelectorAll(".chart-box .tabs button").forEach((b, i) => b.classList.toggle("active", ["factor","strategy","portfolio","intraday"][i] === tab));
+  if (!CHART_TABS.includes(tab)) tab = "factor";
+  document.querySelectorAll(".chart-box .tabs button").forEach((b, i) => b.classList.toggle("active", CHART_TABS[i] === tab));
   document.querySelectorAll(".chart-box .tab-content").forEach(el => el.classList.remove("active"));
   document.getElementById("tab-chart-" + tab).classList.add("active");
+  if (tab === "factor") setTimeout(resizeTradingChart, 0);
+  if (tab === "portfolio") setTimeout(resizePortfolioEquityChart, 0);
   if (tab === "intraday" && currentTicker) loadIntraday("5m");
 }
 
@@ -372,16 +1176,20 @@ async function analyze() {
   try {
     const period = document.getElementById("periodSelect").value;
     const hold = document.getElementById("holdSelect").value;
-    const [analyzeRes, backtestRes, consensusRes, portfolioRes] = await Promise.all([
-      fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`).then(r => r.json()),
-      fetch(`/api/backtest/${ticker}?period=${period}&hold=${hold}`).then(r => r.json()),
-      fetch(`/api/consensus/${ticker}?period=${period}`).then(r => r.json()),
-      fetch(`/api/portfolio/${ticker}?period=${period}&hold=${hold}`).then(r => r.json()),
-    ]);
+    const bundle = await fetch(`/api/dashboard/${ticker}?period=${period}&mode=${currentMode}&hold=${hold}`).then(r => r.json());
+    if (bundle.error) throw new Error(bundle.error);
+    const analyzeRes = bundle.analyze;
+    const backtestRes = bundle.backtest;
+    const consensusRes = bundle.consensus;
+    const portfolioRes = bundle.portfolio;
+    const factorRes = bundle.factors;
     strategyData = backtestRes;
-    render(analyzeRes, backtestRes, consensusRes, portfolioRes);
+    render(analyzeRes, backtestRes, consensusRes, portfolioRes, factorRes);
+    if (CHART_TABS.includes(INITIAL_CHART_VIEW)) switchChartTab(INITIAL_CHART_VIEW);
+    const apiMs = bundle.meta && Number.isFinite(Number(bundle.meta.elapsed_ms)) ? ` | API ${Number(bundle.meta.elapsed_ms).toFixed(0)}ms` : "";
+    const cacheState = bundle.meta && bundle.meta.cache ? ` | cache ${Object.values(bundle.meta.cache).join("/")}` : "";
     document.getElementById("statusBar").textContent =
-      `完成 | ${analyzeRes.data_start}~${analyzeRes.data_end} | ${analyzeRes.records}条 | ${analyzeRes.factor_count}因子`;
+      `完成 | ${analyzeRes.data_start}~${analyzeRes.data_end} | ${analyzeRes.records}条 | ${analyzeRes.factor_count}因子${apiMs}${cacheState}`;
     // 后台加载实时报价和大盘
     loadQuote(ticker);
     loadMarketSnapshot();
@@ -393,7 +1201,7 @@ async function analyze() {
   }
 }
 
-function render(data, btData, consData, portfolioData) {
+function render(data, btData, consData, portfolioData, factorData = null) {
   const a = data.analysis;
   const sig = data.signals;
 
@@ -404,8 +1212,9 @@ function render(data, btData, consData, portfolioData) {
   let barColor = sig.score > 0 ? "#ec2c2c" : sig.score < 0 ? "#19a15f" : "#ff9800";
 
   let numStrats = btData.strategies ? Object.keys(btData.strategies).length : 0;
-  let topStrat = btData.ranked_by_sharpe ? btData.ranked_by_sharpe[0] : null;
+  let topStrat = (btData.ranked_by_score || btData.ranked_by_sharpe || [])[0];
   let topName = topStrat && btData.strategies[topStrat] ? btData.strategies[topStrat].name : "--";
+  let topScore = topStrat && btData.strategies[topStrat] ? btData.strategies[topStrat].quality_score : "--";
 
   document.getElementById("cards").innerHTML = `
     <div class="card signal-card ${a.overall_trend.includes("上升")?"bullish":a.overall_trend.includes("下降")?"bearish":""}">
@@ -424,9 +1233,9 @@ function render(data, btData, consData, portfolioData) {
       <div class="score-bar-wrap"><div class="score-bar-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     </div>
     <div class="card">
-      <div class="label">最佳策略</div>
+      <div class="label">综合推荐</div>
       <div class="value" style="font-size:14px">${topName}</div>
-      <div class="sub">共 ${numStrats} 个策略</div>
+      <div class="sub">评分 ${topScore} | 共 ${numStrats} 个策略</div>
     </div>
     <div class="card">
       <div class="label">策略共识</div>
@@ -472,7 +1281,7 @@ function render(data, btData, consData, portfolioData) {
   document.getElementById("signalContent").innerHTML = sigHtml || '<div style="color:#aaa;font-size:12px">近期无信号</div>';
 
   // 策略回测表格
-  renderStrategyTable(btData);
+  renderStrategyTable(btData, consData);
 
   // 交叉
   let crossHtml = "";
@@ -485,31 +1294,50 @@ function render(data, btData, consData, portfolioData) {
   if (data.chart_path) {
     document.getElementById("chartImg").src = `/api/chart?path=${encodeURIComponent(data.chart_path)}&t=${Date.now()}`;
   }
+  renderTradingViewChart(currentTicker, document.getElementById("periodSelect").value, data, btData);
 
   // 组合权益图 (放到左侧 tab)
   if (portfolioData && portfolioData.portfolio_chart_path) {
     document.getElementById("portfolioChartImg").src = `/api/chart?path=${encodeURIComponent(portfolioData.portfolio_chart_path)}&t=${Date.now()}`;
   }
 
-  // 加载因子
-  loadFactors(currentTicker, document.getElementById("periodSelect").value);
+  // 因子和 AI 面板
+  if (factorData) {
+    renderFactorTable(factorData);
+    renderAiCockpit(data, btData, consData, factorData);
+  } else {
+    loadFactors(currentTicker, document.getElementById("periodSelect").value, data, btData, consData);
+  }
 
   // 组合面板
   renderPortfolio(portfolioData);
+  renderPortfolioLab(portfolioData, btData);
 }
 
-function renderStrategyTable(btData) {
+function renderStrategyTable(btData, consData = null) {
   const strategies = btData.strategies || {};
-  const ranked = btData.ranked_by_sharpe || [];
+  const ranked = btData.ranked_by_score || btData.ranked_by_sharpe || [];
   const holdLabel = btData.hold_label || '';
   if (!ranked.length) {
     document.getElementById("strategyContent").innerHTML = '<div style="color:#aaa;text-align:center;padding:20px">无回测数据</div>';
     return;
   }
 
-  let html = `<div style="font-size:11px;color:#999;margin-bottom:4px">持仓周期: <b>${holdLabel}</b></div>`;
+  const rec = btData.recommendation || {};
+  let html = "";
+  if (rec.primary_strategy) {
+    html += `<div class="strategy-reco">
+      <div class="topline"><strong>${rec.primary_strategy}</strong><span class="score-pill">${rec.score}/100 · ${rec.grade || "--"}</span></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:5px;font-size:11px;color:#9aa4b2">
+        <span class="risk-pill ${riskClass(rec.risk_level)}">${rec.risk_level || "--"}风险</span>
+        <span>${rec.rank_basis || ""}</span>
+      </div>
+      <div class="reason">${rec.reason || ""}</div>
+    </div>`;
+  }
+  html += `<div style="font-size:11px;color:#999;margin-bottom:4px">持仓周期: <b>${holdLabel}</b></div>`;
   html += `<div class="strat-table"><table><tr>
-    <th>#</th><th>策略</th><th>类别</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>交易</th><th>盈亏比</th>
+    <th>#</th><th>策略</th><th>评分</th><th>收益</th><th>回撤</th><th>胜率</th><th>风险</th>
   </tr>`;
 
   ranked.forEach((sid, idx) => {
@@ -520,35 +1348,25 @@ function renderStrategyTable(btData) {
     html += `<tr>
       <td><span class="strat-rank ${rankClass}">${idx+1}</span></td>
       <td style="font-weight:600;white-space:nowrap">${s.name}</td>
-      <td style="font-size:10px;color:#999">${s.category}</td>
+      <td style="font-weight:700">${s.quality_score ?? "--"}</td>
       <td class="${retClass}" style="font-weight:600">${s.total_return}</td>
-      <td>${s.sharpe_ratio}</td>
       <td style="color:#ec2c2c">${s.max_drawdown}</td>
       <td>${s.win_rate}</td>
-      <td>${s.total_trades}</td>
-      <td>${s.profit_factor}</td>
+      <td><span class="risk-pill ${riskClass(s.risk_level)}">${s.risk_level || "--"}</span></td>
     </tr>`;
   });
   html += "</table></div>";
 
   // 顶部策略活跃信号
   let activeHtml = "<div style='margin-top:8px;padding-top:8px;border-top:1px solid #eee'><div style='font-size:11px;font-weight:600;color:#999;margin-bottom:4px'>当前活跃策略信号</div>";
-  (btData.consensus||{}).active_strategies || {};
-  // 从consensus data获取
-  fetch(`/api/consensus/${currentTicker}?period=${document.getElementById("periodSelect").value}`)
-    .then(r => r.json())
-    .then(data => {
-      let signals = data.consensus && data.consensus.active_strategies || {};
-      let sigHtml = "";
-      for (const [sid, info] of Object.entries(signals)) {
-        let cls = info.signal > 0 ? "buy" : "sell";
-        let txt = info.signal >= 2 ? "强买" : info.signal === 1 ? "买入" : info.signal <= -2 ? "强卖" : "卖出";
-        sigHtml += `<div class="strat-signal ${cls}"><span>${info.name}</span><span style="font-weight:600">${txt}</span></div>`;
-      }
-      document.getElementById("strategySignals").innerHTML = sigHtml || '<div style="font-size:11px;color:#aaa">无活跃信号</div>';
-    });
-
-  document.getElementById("strategyContent").innerHTML = html + activeHtml + '<div id="strategySignals" style="max-height:150px;overflow-y:auto"></div>';
+  let signals = consData && consData.consensus && consData.consensus.active_strategies || {};
+  let sigHtml = "";
+  for (const info of Object.values(signals)) {
+    let cls = info.signal > 0 ? "buy" : "sell";
+    let txt = info.signal >= 2 ? "强买" : info.signal === 1 ? "买入" : info.signal <= -2 ? "强卖" : "卖出";
+    sigHtml += `<div class="strat-signal ${cls}"><span>${info.name}</span><span style="font-weight:600">${txt}</span></div>`;
+  }
+  document.getElementById("strategyContent").innerHTML = html + activeHtml + `<div id="strategySignals" style="max-height:150px;overflow-y:auto">${sigHtml || '<div style="font-size:11px;color:#aaa">无活跃信号</div>'}</div>`;
 }
 
 function renderPortfolio(data) {
@@ -632,6 +1450,94 @@ function renderPortfolio(data) {
   document.getElementById("portfolioContent").innerHTML = hpHtml + regimeHtml + portHtml + topHtml + chartHtml;
 }
 
+function renderPortfolioLab(data, btData) {
+  const target = document.getElementById("portfolioLabContent");
+  if (!target) return;
+  if (!data || data.error) {
+    target.innerHTML = '<div style="color:#787b86;font-size:13px">组合研究数据加载失败</div>';
+    return;
+  }
+  const portfolios = data.portfolios || {};
+  const bh = data.buy_hold || {};
+  const regime = data.market_regime || {};
+  const top = data.top_strategies || [];
+  const primary = portfolios.equal_weight_top5 || portfolios.sharpe_weight_top5 || Object.values(portfolios)[0] || {};
+  const methodNames = {
+    equal_weight_top5: "等权Top5",
+    sharpe_weight_top5: "夏普加权Top5",
+    regime_driven: "状态驱动",
+    dynamic_vol_target: "动态波动率",
+  };
+  const methodRows = Object.entries(portfolios).map(([key, p], idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${methodNames[key] || key}</td>
+      <td class="${pctClass(p.total_return)}">${p.total_return}%</td>
+      <td class="neg">${p.max_drawdown}%</td>
+      <td>${p.win_rate}%</td>
+      <td>${p.sharpe_ratio}</td>
+      <td>${p.total_trades}</td>
+    </tr>
+  `).join("");
+
+  const allocation = (top.length ? top : Object.values(btData.strategies || {}).slice(0, 5)).slice(0, 5);
+  const allocationHtml = allocation.length ? allocation.map((s, i) => {
+    const weight = Math.round(100 / allocation.length);
+    return `<div class="allocation-row">
+      <span>${s.name || s.strategy_name || `策略 ${i + 1}`}</span>
+      <span class="allocation-bar"><span style="width:${weight}%"></span></span>
+      <span>${weight}%</span>
+    </div>`;
+  }).join("") : '<div class="lab-subtitle">暂无策略仓位</div>';
+
+  target.innerHTML = `
+    <div class="lab-metrics">
+      <div class="lab-metric"><div class="label">总收益</div><div class="value ${pctClass(primary.total_return)}">${primary.total_return ?? "--"}%</div></div>
+      <div class="lab-metric"><div class="label">夏普</div><div class="value">${primary.sharpe_ratio ?? "--"}</div></div>
+      <div class="lab-metric"><div class="label">最大回撤</div><div class="value neg">${primary.max_drawdown ?? "--"}%</div></div>
+      <div class="lab-metric"><div class="label">胜率</div><div class="value">${primary.win_rate ?? "--"}%</div></div>
+      <div class="lab-metric"><div class="label">买入持有</div><div class="value ${pctClass(bh.total_return)}">${bh.total_return ?? "--"}%</div></div>
+    </div>
+    <div class="portfolio-lab">
+      <div>
+        <div class="portfolio-block" style="margin-bottom:10px">
+          <h3>收益曲线 <span class="lab-subtitle">${data.hold_label || ""}</span></h3>
+          <div class="lab-equity-chart" id="portfolioEquityChart"></div>
+          <div class="lab-subtitle" style="margin-top:8px">蓝线为等权Top5组合，灰线为买入持有，底部红色区域为回撤。</div>
+        </div>
+        <div class="portfolio-block">
+          <h3>组合策略对比 <span class="lab-subtitle">vs 买入持有 ${bh.total_return ?? "--"}%</span></h3>
+          <table class="method-table"><tr><th>#</th><th>组合</th><th>收益</th><th>回撤</th><th>胜率</th><th>夏普</th><th>交易</th></tr>${methodRows}</table>
+        </div>
+      </div>
+      <div>
+        <div class="portfolio-block" style="margin-bottom:10px">
+          <h3>市场状态识别 <span class="lab-subtitle">${regime.score || 0} 置信度</span></h3>
+          <div class="regime-card" style="margin:0">
+            <div class="title">${regime.name || "--"}</div>
+            <div class="desc">${regime.description || ""}</div>
+            <div class="score">推荐类别: ${regime.category || "--"}</div>
+          </div>
+        </div>
+        <div class="portfolio-block" style="margin-bottom:10px">
+          <h3>风险指标 <span class="lab-subtitle">主组合</span></h3>
+          <div class="risk-grid">
+            <div class="risk-item"><span>年化收益</span><strong class="${pctClass(primary.annual_return)}">${primary.annual_return ?? "--"}%</strong></div>
+            <div class="risk-item"><span>平均持仓</span><strong>${primary.avg_hold_days ?? "--"}天</strong></div>
+            <div class="risk-item"><span>交易次数</span><strong>${primary.total_trades ?? "--"}</strong></div>
+            <div class="risk-item"><span>盈亏比</span><strong>${primary.profit_factor ?? "--"}</strong></div>
+          </div>
+        </div>
+        <div class="portfolio-block">
+          <h3>Top策略仓位占比 <span class="lab-subtitle">等权配置</span></h3>
+          <div class="allocation-list">${allocationHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+  renderPortfolioEquityChart(data);
+}
+
 async function genStrategyChart() {
   if (!currentTicker) return;
   const tab = document.getElementById("tab-chart-strategy");
@@ -646,18 +1552,26 @@ async function genStrategyChart() {
   }
 }
 
-async function loadFactors(ticker, period) {
+async function loadFactors(ticker, period, analysisData = null, btData = null, consData = null) {
   try {
     const res = await fetch(`/api/factors/${ticker}?period=${period}`);
     const data = await res.json();
-    const factors = data.factors||{};
-    let html = "<table><tr><th>因子</th><th>类别</th><th>值</th></tr>";
-    for (const [key, f] of Object.entries(factors)) {
-      html += `<tr><td>${f.description}</td><td class="factor-cat">${f.category}</td><td style="font-weight:600">${f.value}</td></tr>`;
-    }
-    html += "</table>";
-    document.getElementById("factorContent").innerHTML = html;
-  } catch(e) { document.getElementById("factorContent").innerHTML = '<div style="color:#aaa">加载失败</div>'; }
+    renderFactorTable(data);
+    if (analysisData && btData && consData) renderAiCockpit(analysisData, btData, consData, data);
+  } catch(e) {
+    document.getElementById("factorContent").innerHTML = '<div style="color:#aaa">加载失败</div>';
+    if (analysisData && btData && consData) renderAiCockpit(analysisData, btData, consData, null);
+  }
+}
+
+function renderFactorTable(data) {
+  const factors = data && data.factors || {};
+  let html = "<table><tr><th>因子</th><th>类别</th><th>值</th></tr>";
+  for (const f of Object.values(factors)) {
+    html += `<tr><td>${f.description}</td><td class="factor-cat">${f.category}</td><td style="font-weight:600">${f.value}</td></tr>`;
+  }
+  html += "</table>";
+  document.getElementById("factorContent").innerHTML = html;
 }
 
 async function patternSearch() {
@@ -796,24 +1710,24 @@ function drawIntraday(data) {
   
   // 确定颜色
   const prevClose = data.prev_close || prices[0];
-  const upColor = "#ec2c2c";
-  const downColor = "#19a15f";
+  const upColor = TV_COLORS.up;
+  const downColor = TV_COLORS.down;
   const lineColor = data.change_pct >= 0 ? upColor : downColor;
   
-  let svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="background:#fff;border-radius:6px">`;
+  let svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="background:${TV_COLORS.bg};border-radius:4px">`;
   
   // 网格线
   for (let i = 0; i <= 5; i++) {
     const y = pad.top + (plotH / 5) * i;
     const price = pMax - (pRange / 5) * i;
-    svg += `<line x1="${pad.left}" y1="${y}" x2="${w-pad.right}" y2="${y}" stroke="#f0f0f0" stroke-width="1"/>`;
-    svg += `<text x="${pad.left-5}" y="${y+4}" text-anchor="end" font-size="11" fill="#999">${price.toFixed(2)}</text>`;
+    svg += `<line x1="${pad.left}" y1="${y}" x2="${w-pad.right}" y2="${y}" stroke="${TV_COLORS.grid}" stroke-width="1"/>`;
+    svg += `<text x="${pad.left-5}" y="${y+4}" text-anchor="end" font-size="11" fill="${TV_COLORS.muted}">${price.toFixed(2)}</text>`;
   }
   
   // 昨收线
   const yPrev = yScale(prevClose);
-  svg += `<line x1="${pad.left}" y1="${yPrev}" x2="${w-pad.right}" y2="${yPrev}" stroke="#999" stroke-width="1" stroke-dasharray="5,5"/>`;
-  svg += `<text x="${w-pad.right+5}" y="${yPrev+4}" font-size="10" fill="#999">昨收</text>`;
+  svg += `<line x1="${pad.left}" y1="${yPrev}" x2="${w-pad.right}" y2="${yPrev}" stroke="${TV_COLORS.muted}" stroke-width="1" stroke-dasharray="5,5"/>`;
+  svg += `<text x="${w-pad.right+5}" y="${yPrev+4}" font-size="10" fill="${TV_COLORS.muted}">昨收</text>`;
   
   // 价格线 + 填充
   let pathD = "";
@@ -841,7 +1755,7 @@ function drawIntraday(data) {
   for (let i = 0; i < prices.length; i += step) {
     const x = xScale(i);
     const timeStr = data.data[i].datetime.slice(11, 16);
-    svg += `<text x="${x}" y="${pad.top+plotH+18}" text-anchor="middle" font-size="10" fill="#999">${timeStr}</text>`;
+    svg += `<text x="${x}" y="${pad.top+plotH+18}" text-anchor="middle" font-size="10" fill="${TV_COLORS.muted}">${timeStr}</text>`;
   }
   
   // 成交量柱
@@ -856,13 +1770,13 @@ function drawIntraday(data) {
   });
   
   // 成交量标签
-  svg += `<text x="${pad.left}" y="${volTop-2}" font-size="9" fill="#aaa">成交量</text>`;
+  svg += `<text x="${pad.left}" y="${volTop-2}" font-size="9" fill="${TV_COLORS.muted}">成交量</text>`;
   
   // 图例
   const up = data.change_pct >= 0;
   svg += `<text x="${w-pad.right}" y="15" text-anchor="end" font-size="14" font-weight="bold" fill="${lineColor}">${data.current_price}</text>`;
   svg += `<text x="${w-pad.right}" y="30" text-anchor="end" font-size="11" fill="${lineColor}">${up?'+':''}${data.change} (${up?'+':''}${data.change_pct}%)</text>`;
-  svg += `<text x="${pad.left}" y="15" font-size="11" fill="#666">${data.ticker} · ${data.interval} · ${data.data_start?.slice(5)||''} ~ ${data.data_end?.slice(5)||''}</text>`;
+  svg += `<text x="${pad.left}" y="15" font-size="11" fill="${TV_COLORS.text}">${data.ticker} · ${data.interval} · ${data.data_start?.slice(5)||''} ~ ${data.data_end?.slice(5)||''}</text>`;
   
   svg += "</svg>";
   area.innerHTML = svg;
