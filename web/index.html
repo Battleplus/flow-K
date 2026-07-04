@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>K线趋势斜率分析</title>
+<title>K线趋势斜率信号分析</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -34,19 +34,30 @@ header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
 .toolbar button:hover { background: #0773c5; }
 .toolbar .status { font-size: 13px; color: #888; margin-left: auto; }
 
-main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+main { padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
 
+/* 卡片区 */
 .cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
 .card {
   background: #fff; border-radius: 8px; padding: 16px 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06); min-width: 140px; flex: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06); min-width: 130px; flex: 1;
 }
 .card .label { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
-.card .value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+.card .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
 .card .sub { font-size: 12px; color: #888; margin-top: 2px; }
-.bullish .value { color: #00b894; }
-.bearish .value { color: #d63031; }
 
+/* 信号卡片 */
+.signal-card {
+  border-left: 3px solid transparent;
+}
+.signal-card.bullish { border-left-color: #ec2c2c; }
+.signal-card.bearish { border-left-color: #19a15f; }
+.signal-card.neutral { border-left-color: #ff9800; }
+.signal-card .value.bullish-text { color: #ec2c2c; font-size: 28px; }
+.signal-card .value.bearish-text { color: #19a15f; font-size: 28px; }
+.signal-card .value.neutral-text { color: #ff9800; font-size: 28px; }
+
+/* 面板区 */
 .panels { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
 .panel {
   background: #fff; border-radius: 8px; padding: 16px;
@@ -58,10 +69,10 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px;
 }
-.slope-row .name { font-weight: 600; }
+.slope-row .name { font-weight: 600; min-width: 40px; }
 .slope-row .dir { font-size: 12px; padding: 1px 8px; border-radius: 10px; font-weight: 600; }
-.dir.up { background: #e6fffa; color: #00b894; }
-.dir.down { background: #ffeaa7; color: #d63031; }
+.dir.up { background: #ffeaea; color: #ec2c2c; }
+.dir.down { background: #e8f5e9; color: #19a15f; }
 .dir.flat { background: #dfe6e9; color: #636e72; }
 
 .sr-row {
@@ -72,8 +83,23 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 .cross-item {
   padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
 }
-.cross-item .gold { color: #00b894; font-weight: 600; }
-.cross-item .dead { color: #d63031; font-weight: 600; }
+.cross-item .gold { color: #ec2c2c; font-weight: 600; }
+.cross-item .dead { color: #19a15f; font-weight: 600; }
+
+/* 信号列表 */
+.signal-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.signal-item .sig-badge {
+  font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600;
+  white-space: nowrap;
+}
+.sig-badge.bullish { background: #ffeaea; color: #ec2c2c; }
+.sig-badge.bearish { background: #e8f5e9; color: #19a15f; }
+.sig-badge.neutral { background: #fff3e0; color: #e65100; }
+.signal-item .sig-strength { font-size: 10px; color: #999; }
+.signal-item .sig-date { font-size: 11px; color: #aaa; margin-left: auto; }
 
 .chart-box {
   background: #fff; border-radius: 8px; padding: 16px;
@@ -92,12 +118,20 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .hidden { display: none; }
+
+/* 信号强度柱 */
+.score-bar-wrap {
+  height: 8px; background: #e0e0e0; border-radius: 4px; margin-top: 6px; overflow: hidden;
+}
+.score-bar-fill {
+  height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>K线趋势斜率分析</h1>
+  <h1>K线趋势 · 斜率 · 信号分析</h1>
 </header>
 
 <div class="toolbar">
@@ -115,10 +149,13 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 <main>
   <div class="loader active" id="loader">
     <div class="spinner"></div>
-    <p style="margin-top:12px">正在加载...</p>
+    <p style="margin-top:12px">计算趋势线、斜率、信号中...</p>
   </div>
   <div id="results" class="hidden">
+    <!-- 概览卡片 -->
     <div class="cards" id="cards"></div>
+
+    <!-- 面板: 斜率 + 支撑压力 + 交叉 + 信号 -->
     <div class="panels">
       <div class="panel" id="slopePanel">
         <h3>均线斜率</h3>
@@ -132,9 +169,15 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
         <h3>近期交叉</h3>
         <div id="crossContent"></div>
       </div>
+      <div class="panel" id="signalPanel">
+        <h3>活跃信号</h3>
+        <div id="signalContent"></div>
+      </div>
     </div>
+
+    <!-- 图表 -->
     <div class="chart-box" id="chartBox">
-      <img id="chartImg" src="" alt="K线图" />
+      <img id="chartImg" src="" alt="K线趋势图" />
     </div>
   </div>
 </main>
@@ -154,7 +197,8 @@ async function analyze() {
     const data = await res.json();
     if (data.error) { throw new Error(data.error); }
     render(data);
-    document.getElementById("statusBar").textContent = "分析完成";
+    document.getElementById("statusBar").textContent =
+      `完成 | ${data.data_start} ~ ${data.data_end} | ${data.records} 条`;
   } catch (e) {
     document.getElementById("statusBar").textContent = "出错: " + e.message;
   } finally {
@@ -165,10 +209,33 @@ async function analyze() {
 
 function render(data) {
   const a = data.analysis;
+  const sig = data.signals;
 
-  // 卡片
-  let trendClass = a.overall_trend.includes("上升") ? "bullish" : a.overall_trend.includes("下降") ? "bearish" : "";
-  let alignClass = a.ma_alignment.alignment.includes("多头") ? "bullish" : a.ma_alignment.alignment.includes("空头") ? "bearish" : "";
+  // ── 概览卡片 ──
+  let trendClass = a.overall_trend.includes("上升") ? "signal-card bullish" :
+                   a.overall_trend.includes("下降") ? "signal-card bearish" : "";
+  let alignClass = a.ma_alignment.alignment.includes("多头") ? "signal-card bullish" :
+                   a.ma_alignment.alignment.includes("空头") ? "signal-card bearish" : "";
+
+  // 信号判定卡片
+  let sigVerdictClass = "";
+  let sigVerdictTextClass = "";
+  if (sig.verdict.includes("偏多") || sig.verdict.includes("强偏多")) {
+    sigVerdictClass = "signal-card bullish";
+    sigVerdictTextClass = "bullish-text";
+  } else if (sig.verdict.includes("偏空") || sig.verdict.includes("强偏空")) {
+    sigVerdictClass = "signal-card bearish";
+    sigVerdictTextClass = "bearish-text";
+  } else {
+    sigVerdictClass = "signal-card neutral";
+    sigVerdictTextClass = "neutral-text";
+  }
+
+  // 评分柱状图
+  let maxScore = Math.max(Math.abs(sig.score), 6);
+  let barPct = Math.min(Math.abs(sig.score) / maxScore * 100, 100);
+  let barColor = sig.score > 0 ? "#ec2c2c" : sig.score < 0 ? "#19a15f" : "#ff9800";
+
   document.getElementById("cards").innerHTML = `
     <div class="card ${trendClass}">
       <div class="label">整体趋势</div>
@@ -184,9 +251,17 @@ function render(data) {
       <div class="value">${a.latest_close}</div>
       <div class="sub">${a.latest_date}</div>
     </div>
+    <div class="card ${sigVerdictClass}">
+      <div class="label">信号判定</div>
+      <div class="value ${sigVerdictTextClass}">${sig.verdict}</div>
+      <div class="sub">综合评分: ${sig.score > 0 ? '+' : ''}${sig.score}</div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-fill" style="width:${barPct}%;background:${barColor}"></div>
+      </div>
+    </div>
   `;
 
-  // 斜率
+  // ── 斜率面板 ──
   let slopeHtml = "";
   for (const [name, info] of Object.entries(a.slopes)) {
     let dirClass = info.direction === "上升" ? "up" : info.direction === "下降" ? "down" : "flat";
@@ -201,15 +276,15 @@ function render(data) {
   }
   document.getElementById("slopeContent").innerHTML = slopeHtml;
 
-  // 支撑压力
+  // ── 支撑压力 ──
   const sr = a.support_resistance;
   document.getElementById("srContent").innerHTML = `
     <div class="sr-row"><span>当前价</span><strong>${sr.current}</strong></div>
-    <div class="sr-row"><span>支撑位</span><span style="color:#4caf50">${sr.support} (${sr.pct_to_support}%)</span></div>
-    <div class="sr-row"><span>压力位</span><span style="color:#ef5350">${sr.resistance} (+${sr.pct_to_resistance}%)</span></div>
+    <div class="sr-row"><span>支撑位</span><span style="color:#4caf50">${sr.support} (距${sr.pct_to_support}%)</span></div>
+    <div class="sr-row"><span>压力位</span><span style="color:#ec2c2c">${sr.resistance} (+${sr.pct_to_resistance}%)</span></div>
   `;
 
-  // 交叉
+  // ── 交叉 ──
   let crossHtml = "";
   if (a.crosses.length > 0) {
     a.crosses.slice(-5).reverse().forEach(c => {
@@ -225,12 +300,36 @@ function render(data) {
   }
   document.getElementById("crossContent").innerHTML = crossHtml;
 
-  // 图表
+  // ── 信号面板 ──
+  let sigHtml = "";
+  if (sig.active && sig.active.length > 0) {
+    sig.active.forEach(s => {
+      let badgeClass = s.direction === "bullish" ? "bullish" : s.direction === "bearish" ? "bearish" : "neutral";
+      let dirLabel = s.direction === "bullish" ? "看多" : s.direction === "bearish" ? "看空" : "中性";
+      sigHtml += `
+        <div class="signal-item">
+          <span class="sig-badge ${badgeClass}">${dirLabel}</span>
+          <span>${s.name}</span>
+          <span class="sig-strength">强度:${s.strength}</span>
+          <span class="sig-date">${s.last_date}</span>
+        </div>`;
+    });
+  } else {
+    sigHtml = '<div class="signal-item">近期无信号触发</div>';
+  }
+  document.getElementById("signalContent").innerHTML = sigHtml;
+
+  // ── 图表 ──
   if (data.chart_path) {
     document.getElementById("chartImg").src = "/api/chart?path=" + encodeURIComponent(data.chart_path);
     document.getElementById("chartBox").classList.remove("hidden");
   }
 }
+
+// 支持回车键触发
+document.getElementById("tickerInput").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") analyze();
+});
 
 // 页面加载自动分析
 analyze();

@@ -1,4 +1,4 @@
-﻿"""K 线趋势斜率分析工具 - CLI 入口
+"""K 线趋势斜率信号分析工具 - CLI 入口
 
 用法:
     python src/analyzer.py NVDA                    # 默认 1 年日线
@@ -16,20 +16,21 @@ sys.path.insert(0, str(ROOT))
 
 from src.data_loader import fetch_data
 from src.indicators import trend_analysis
+from src.patterns import add_indicators, detect_all, signal_summary
 from src.chart import plot_kline_trend
 
 
 def analyze(ticker: str, period: str = "1y", mas: list[int] | None = None):
-    """主分析函数：拉取数据 → 计算指标 → 绘图"""
+    """主分析函数：拉取数据 → 计算指标 → 信号检测 → 绘图"""
     print(f"\n{'='*60}")
-    print(f"  K 线趋势斜率分析: {ticker}")
+    print(f"  K 线趋势斜率信号分析: {ticker}")
     print(f"{'='*60}\n")
 
-    print("[1/3] 拉取数据...")
+    print("[1/4] 拉取数据...")
     df = fetch_data(ticker, period=period)
     print(f"  数据范围: {df['Date'].min()} ~ {df['Date'].max()}, {len(df)} 条")
 
-    print("[2/3] 计算趋势指标...")
+    print("[2/4] 计算趋势指标...")
     analysis = trend_analysis(df)
 
     print(f"\n  📊 整体趋势: {analysis['overall_trend']}")
@@ -50,8 +51,21 @@ def analyze(ticker: str, period: str = "1y", mas: list[int] | None = None):
         for c in crosses[-5:]:
             print(f"    {c['date']}: {c['type']} ({c['ma1']} x {c['ma2']})")
 
-    print("\n[3/3] 生成图表...")
-    chart_path = plot_kline_trend(df, ticker, analysis)
+    print("\n[3/4] 检测趋势线/斜率/曲线/形态信号...")
+    df = add_indicators(df)
+    df = detect_all(df)
+    sig = signal_summary(df)
+
+    print(f"\n  ⚡ 信号评分: {sig['score']}  →  {sig['verdict']}")
+    print(f"  偏多: {sig['bullish_count']}  | 偏空: {sig['bearish_count']}  | 中性: {sig['neutral_count']}")
+    if sig["active_signals"]:
+        print(f"\n  近期活跃信号:")
+        for s in sig["active_signals"]:
+            dir_emoji = "🔴" if s['direction'] == 'bullish' else "🟢" if s['direction'] == 'bearish' else "⚪"
+            print(f"    {dir_emoji} {s['name']} (强度 {s['strength']}) - {s['last_date']}")
+
+    print("\n[4/4] 生成图表...")
+    chart_path = plot_kline_trend(df, ticker, analysis, sig)
     print(f"  图表: {chart_path}")
     print(f"\n  ✅ 分析完成！\n")
     return chart_path
@@ -59,7 +73,7 @@ def analyze(ticker: str, period: str = "1y", mas: list[int] | None = None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="K 线趋势斜率分析工具",
+        description="K 线趋势斜率信号分析工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
