@@ -57,12 +57,15 @@ def slope_summary(df: pd.DataFrame, mas: list[int] = None) -> dict:
 
 def ma_alignment(df: pd.DataFrame) -> dict:
     """判断均线排列：多头/空头/交织"""
+    import re
     latest = df.iloc[-1]
     mas = {}
     for col in df.columns:
         if col.startswith("ma"):
-            p = int(col[2:])
-            mas[p] = latest[col]
+            m = re.match(r"^ma(\d+)$", col)
+            if m:
+                p = int(m.group(1))
+                mas[p] = latest[col]
 
     if not mas:
         return {"alignment": "无数据", "detail": ""}

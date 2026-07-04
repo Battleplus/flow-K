@@ -3,207 +3,231 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>K线趋势斜率信号分析</title>
+<title>FLOW AI · 多因子趋势分析</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-  background: #f5f6fa; color: #2d3436; line-height: 1.5;
-}
-header {
-  background: #1a1a2e; color: #fff; padding: 14px 24px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
-.toolbar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 24px; background: #fff; border-bottom: 1px solid #e0e0e0;
-}
-.toolbar input {
-  padding: 7px 12px; font-size: 14px; border: 1px solid #ccc;
-  border-radius: 6px; width: 140px;
-}
-.toolbar select {
-  padding: 7px 12px; font-size: 14px; border: 1px solid #ccc;
-  border-radius: 6px; background: #fff; cursor: pointer;
-}
-.toolbar button {
-  padding: 7px 18px; font-size: 14px; border: none; border-radius: 6px;
-  background: #0984e3; color: #fff; cursor: pointer; font-weight: 500;
-}
-.toolbar button:hover { background: #0773c5; }
-.toolbar .status { font-size: 13px; color: #888; margin-left: auto; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;background:#f0f2f5;color:#2d3436;line-height:1.6}
+header{background:#1a1a2e;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+header h1{font-size:18px;font-weight:700;letter-spacing:-0.3px;white-space:nowrap}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.toolbar input{padding:6px 12px;font-size:14px;border:1px solid #555;border-radius:6px;background:#2d2d44;color:#fff;width:110px}
+.toolbar select{padding:6px 10px;font-size:13px;border:1px solid #555;border-radius:6px;background:#2d2d44;color:#fff;cursor:pointer}
+.toolbar button{padding:6px 16px;font-size:14px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer;font-weight:500}
+.toolbar button:hover{background:#0773c5}
+.toolbar .mode-btn{padding:5px 12px;font-size:13px;border:1px solid #0984e3;border-radius:6px;background:transparent;color:#0984e3;cursor:pointer}
+.toolbar .mode-btn.active{background:#0984e3;color:#fff}
+.toolbar .status{font-size:12px;color:#aaa;margin-left:auto}
+main{max-width:1600px;margin:0 auto;padding:16px 24px}
 
-main { padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
+/* 卡片 */
+.cards{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.06);min-width:140px;flex:1}
+.card .label{font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px}
+.card .value{font-size:20px;font-weight:700;margin-top:2px}
+.card .sub{font-size:11px;color:#888;margin-top:2px}
+.signal-card{border-left:3px solid transparent}
+.signal-card.bullish{border-left-color:#ec2c2c}
+.signal-card.bearish{border-left-color:#19a15f}
+.signal-card.neutral{border-left-color:#ff9800}
 
-/* 卡片区 */
-.cards { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-.card {
-  background: #fff; border-radius: 8px; padding: 16px 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06); min-width: 130px; flex: 1;
-}
-.card .label { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; }
-.card .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
-.card .sub { font-size: 12px; color: #888; margin-top: 2px; }
+/* 评分柱 */
+.score-bar-wrap{height:6px;background:#e0e0e0;border-radius:3px;margin-top:6px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
 
-/* 信号卡片 */
-.signal-card {
-  border-left: 3px solid transparent;
-}
-.signal-card.bullish { border-left-color: #ec2c2c; }
-.signal-card.bearish { border-left-color: #19a15f; }
-.signal-card.neutral { border-left-color: #ff9800; }
-.signal-card .value.bullish-text { color: #ec2c2c; font-size: 28px; }
-.signal-card .value.bearish-text { color: #19a15f; font-size: 28px; }
-.signal-card .value.neutral-text { color: #ff9800; font-size: 28px; }
+/* 内容区布局 */
+.content{display:grid;grid-template-columns:1fr 380px;gap:16px}
+@media(max-width:1100px){.content{grid-template-columns:1fr}}
+.chart-section{flex:1}
+.sidebar{display:flex;flex-direction:column;gap:12px}
 
-/* 面板区 */
-.panels { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
-.panel {
-  background: #fff; border-radius: 8px; padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06); flex: 1; min-width: 280px;
-}
-.panel h3 { font-size: 14px; margin-bottom: 10px; color: #1a1a2e; border-bottom: 2px solid #0984e3; padding-bottom: 6px; }
+/* 面板 */
+.panel{background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.panel h3{font-size:13px;font-weight:600;margin-bottom:8px;color:#1a1a2e;border-bottom:2px solid #0984e3;padding-bottom:5px;display:flex;align-items:center;justify-content:space-between}
+.panel h3 .badge{font-size:10px;padding:1px 6px;border-radius:8px;background:#e0e0e0;color:#666}
 
-.slope-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px;
-}
-.slope-row .name { font-weight: 600; min-width: 40px; }
-.slope-row .dir { font-size: 12px; padding: 1px 8px; border-radius: 10px; font-weight: 600; }
-.dir.up { background: #ffeaea; color: #ec2c2c; }
-.dir.down { background: #e8f5e9; color: #19a15f; }
-.dir.flat { background: #dfe6e9; color: #636e72; }
+/* 斜率行 */
+.slope-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f8f8f8;font-size:13px}
+.slope-row .name{font-weight:600;min-width:45px}
+.slope-row .dir{font-size:11px;padding:1px 8px;border-radius:10px;font-weight:600}
+.dir.up{background:#ffeaea;color:#ec2c2c}
+.dir.down{background:#e8f5e9;color:#19a15f}
+.dir.flat{background:#dfe6e9;color:#636e72}
 
-.sr-row {
-  display: flex; justify-content: space-between; padding: 8px 0;
-  border-bottom: 1px solid #f5f5f5; font-size: 14px;
-}
+/* 信号项 */
+.signal-item{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f8f8f8;font-size:12px}
+.sig-badge{font-size:10px;padding:2px 6px;border-radius:8px;font-weight:600;white-space:nowrap}
+.sig-badge.bullish{background:#ffeaea;color:#ec2c2c}
+.sig-badge.bearish{background:#e8f5e9;color:#19a15f}
+.sig-badge.neutral{background:#fff3e0;color:#e65100}
+.sig-date{font-size:10px;color:#aaa;margin-left:auto}
 
-.cross-item {
-  padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
-}
-.cross-item .gold { color: #ec2c2c; font-weight: 600; }
-.cross-item .dead { color: #19a15f; font-weight: 600; }
+/* 图表 */
+.chart-box{background:#fff;border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-top:16px}
+.chart-box img{width:100%;border-radius:4px}
 
-/* 信号列表 */
-.signal-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
-}
-.signal-item .sig-badge {
-  font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600;
-  white-space: nowrap;
-}
-.sig-badge.bullish { background: #ffeaea; color: #ec2c2c; }
-.sig-badge.bearish { background: #e8f5e9; color: #19a15f; }
-.sig-badge.neutral { background: #fff3e0; color: #e65100; }
-.signal-item .sig-strength { font-size: 10px; color: #999; }
-.signal-item .sig-date { font-size: 11px; color: #aaa; margin-left: auto; }
+/* 形态搜索 */
+.search-result{background:#f8f9fa;border-radius:6px;padding:8px;margin-top:6px;font-size:12px}
+.search-result .item{padding:3px 0;border-bottom:1px solid #eee}
+.search-result .corr{font-weight:600;color:#0984e3}
+.search-result .pattern-type{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;background:#e0e0e0;color:#555;margin-left:4px}
 
-.chart-box {
-  background: #fff; border-radius: 8px; padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-top: 20px;
-}
-.chart-box img { width: 100%; border-radius: 4px; }
+/* 因子表 */
+.factor-table{max-height:300px;overflow-y:auto;font-size:12px}
+.factor-table table{width:100%;border-collapse:collapse}
+.factor-table th{position:sticky;top:0;background:#f0f2f5;padding:4px 8px;text-align:left;font-size:11px;color:#999}
+.factor-table td{padding:3px 8px;border-bottom:1px solid #f5f5f5}
+.factor-cat{color:#999;font-size:10px}
 
-.loader {
-  display: none; text-align: center; padding: 60px; color: #888;
-}
-.loader.active { display: block; }
-.spinner {
-  display: inline-block; width: 36px; height: 36px;
-  border: 3px solid #e0e0e0; border-top-color: #0984e3;
-  border-radius: 50%; animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.hidden { display: none; }
+/* Tab */
+.tabs{display:flex;gap:0;margin-bottom:0}
+.tabs button{padding:6px 14px;font-size:12px;border:1px solid #ddd;border-right:none;background:#f8f9fa;cursor:pointer;color:#666}
+.tabs button:first-child{border-radius:6px 0 0 6px}
+.tabs button:last-child{border-right:1px solid #ddd;border-radius:0 6px 6px 0}
+.tabs button.active{background:#0984e3;color:#fff;border-color:#0984e3}
+.tab-content{display:none}
+.tab-content.active{display:block}
 
-/* 信号强度柱 */
-.score-bar-wrap {
-  height: 8px; background: #e0e0e0; border-radius: 4px; margin-top: 6px; overflow: hidden;
-}
-.score-bar-fill {
-  height: 100%; border-radius: 4px; transition: width 0.5s ease;
-}
+.loader{display:none;text-align:center;padding:40px;color:#888}
+.loader.active{display:block}
+.spinner{display:inline-block;width:30px;height:30px;border:3px solid #e0e0e0;border-top-color:#0984e3;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>K线趋势 · 斜率 · 信号分析</h1>
+  <h1>FLOW AI · 多因子趋势分析</h1>
+  <div class="toolbar">
+    <input id="tickerInput" placeholder="股票代码" value="NVDA" />
+    <select id="periodSelect">
+      <option value="1y">1年</option>
+      <option value="6mo" selected>6个月</option>
+      <option value="3mo">3个月</option>
+      <option value="1mo">1个月</option>
+    </select>
+    <button onclick="analyze()">分析</button>
+    <span style="color:#888">|</span>
+    <button class="mode-btn active" data-mode="multi" onclick="setMode('multi')">多面板</button>
+    <button class="mode-btn" data-mode="single" onclick="setMode('single')">单面板</button>
+    <span class="status" id="statusBar">就绪</span>
+  </div>
 </header>
 
-<div class="toolbar">
-  <input id="tickerInput" placeholder="股票代码" value="NVDA" />
-  <select id="periodSelect">
-    <option value="1y">1 年</option>
-    <option value="6mo">6 个月</option>
-    <option value="3mo">3 个月</option>
-    <option value="1mo">1 个月</option>
-  </select>
-  <button onclick="analyze()">分析</button>
-  <span class="status" id="statusBar">就绪</span>
+<div class="loader active" id="loader">
+  <div class="spinner"></div>
+  <p style="margin-top:10px;font-size:14px">计算因子、趋势线、信号中...</p>
 </div>
 
-<main>
-  <div class="loader active" id="loader">
-    <div class="spinner"></div>
-    <p style="margin-top:12px">计算趋势线、斜率、信号中...</p>
-  </div>
-  <div id="results" class="hidden">
-    <!-- 概览卡片 -->
-    <div class="cards" id="cards"></div>
+<main id="mainContent" class="hidden">
+  <!-- 概览卡片 -->
+  <div class="cards" id="cards"></div>
 
-    <!-- 面板: 斜率 + 支撑压力 + 交叉 + 信号 -->
-    <div class="panels">
-      <div class="panel" id="slopePanel">
-        <h3>均线斜率</h3>
-        <div id="slopeContent"></div>
-      </div>
-      <div class="panel" id="srPanel">
-        <h3>支撑 / 压力</h3>
-        <div id="srContent"></div>
-      </div>
-      <div class="panel" id="crossPanel">
-        <h3>近期交叉</h3>
-        <div id="crossContent"></div>
-      </div>
-      <div class="panel" id="signalPanel">
-        <h3>活跃信号</h3>
-        <div id="signalContent"></div>
+  <div class="content">
+    <!-- 左侧: 图表 -->
+    <div class="chart-section">
+      <div class="chart-box">
+        <img id="chartImg" src="" alt="图表" />
       </div>
     </div>
 
-    <!-- 图表 -->
-    <div class="chart-box" id="chartBox">
-      <img id="chartImg" src="" alt="K线趋势图" />
+    <!-- 右侧: 侧边栏 -->
+    <div class="sidebar">
+      <!-- Tab 切换 -->
+      <div class="panel">
+        <div class="tabs">
+          <button class="active" onclick="switchTab('signals')">信号</button>
+          <button onclick="switchTab('slopes')">斜率</button>
+          <button onclick="switchTab('pattern')">形态搜索</button>
+          <button onclick="switchTab('factors')">因子</button>
+        </div>
+
+        <!-- 信号 Tab -->
+        <div class="tab-content active" id="tab-signals">
+          <div id="signalContent" style="max-height:400px;overflow-y:auto;margin-top:8px">
+            <div style="color:#aaa;font-size:12px">加载中...</div>
+          </div>
+        </div>
+
+        <!-- 斜率 Tab -->
+        <div class="tab-content" id="tab-slopes">
+          <div id="slopeContent" style="margin-top:8px"></div>
+          <div id="srContent" style="margin-top:12px;padding-top:8px;border-top:1px solid #eee"></div>
+        </div>
+
+        <!-- 形态搜索 Tab -->
+        <div class="tab-content" id="tab-pattern">
+          <div style="margin-top:8px">
+            <div style="font-size:12px;color:#666;margin-bottom:8px">搜索与当前走势相似的区间</div>
+            <select id="searchType" style="padding:4px 8px;font-size:12px;border:1px solid #ddd;border-radius:4px;margin-bottom:8px;width:100%">
+              <option value="historical">该股票历史相似</option>
+              <option value="cross_stock">其他股票相似走势</option>
+            </select>
+            <button onclick="patternSearch()" style="padding:5px 12px;font-size:12px;border:none;border-radius:6px;background:#0984e3;color:#fff;cursor:pointer;width:100%">搜索</button>
+            <div id="patternFeatures" style="margin-top:8px;font-size:11px;color:#666"></div>
+            <div id="patternResults" style="margin-top:8px;max-height:300px;overflow-y:auto"></div>
+          </div>
+        </div>
+
+        <!-- 因子 Tab -->
+        <div class="tab-content" id="tab-factors">
+          <div class="factor-table" id="factorContent" style="margin-top:8px">
+            <div style="color:#aaa;font-size:12px">加载中...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 交叉记录 -->
+      <div class="panel" id="crossPanel">
+        <h3>近期交叉 <span class="badge">MA5×MA20</span></h3>
+        <div id="crossContent"></div>
+      </div>
     </div>
   </div>
 </main>
 
 <script>
+let currentMode = "multi";
+let currentTicker = "";
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll(".mode-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  if (currentTicker) analyze();
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tabs button").forEach((b, i) => {
+    b.classList.toggle("active", ["signals","slopes","pattern","factors"][i] === tab);
+  });
+  document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+  document.getElementById("tab-" + tab).classList.add("active");
+}
+
 async function analyze() {
   const ticker = document.getElementById("tickerInput").value.trim();
   if (!ticker) return;
+  currentTicker = ticker;
 
   document.getElementById("loader").classList.add("active");
-  document.getElementById("results").classList.add("hidden");
+  document.getElementById("mainContent").classList.add("hidden");
   document.getElementById("statusBar").textContent = "分析中...";
 
   try {
     const period = document.getElementById("periodSelect").value;
-    const res = await fetch("/api/analyze/" + ticker + "?period=" + period);
+    const res = await fetch(`/api/analyze/${ticker}?period=${period}&mode=${currentMode}`);
     const data = await res.json();
-    if (data.error) { throw new Error(data.error); }
+    if (data.error) throw new Error(data.error);
     render(data);
     document.getElementById("statusBar").textContent =
-      `完成 | ${data.data_start} ~ ${data.data_end} | ${data.records} 条`;
+      `完成 | ${data.data_start}~${data.data_end} | ${data.records}条 | ${data.factor_count}因子`;
   } catch (e) {
     document.getElementById("statusBar").textContent = "出错: " + e.message;
   } finally {
     document.getElementById("loader").classList.remove("active");
-    document.getElementById("results").classList.remove("hidden");
+    document.getElementById("mainContent").classList.remove("hidden");
   }
 }
 
@@ -211,127 +235,130 @@ function render(data) {
   const a = data.analysis;
   const sig = data.signals;
 
-  // ── 概览卡片 ──
-  let trendClass = a.overall_trend.includes("上升") ? "signal-card bullish" :
-                   a.overall_trend.includes("下降") ? "signal-card bearish" : "";
-  let alignClass = a.ma_alignment.alignment.includes("多头") ? "signal-card bullish" :
-                   a.ma_alignment.alignment.includes("空头") ? "signal-card bearish" : "";
-
-  // 信号判定卡片
-  let sigVerdictClass = "";
-  let sigVerdictTextClass = "";
-  if (sig.verdict.includes("偏多") || sig.verdict.includes("强偏多")) {
-    sigVerdictClass = "signal-card bullish";
-    sigVerdictTextClass = "bullish-text";
-  } else if (sig.verdict.includes("偏空") || sig.verdict.includes("强偏空")) {
-    sigVerdictClass = "signal-card bearish";
-    sigVerdictTextClass = "bearish-text";
-  } else {
-    sigVerdictClass = "signal-card neutral";
-    sigVerdictTextClass = "neutral-text";
-  }
-
-  // 评分柱状图
-  let maxScore = Math.max(Math.abs(sig.score), 6);
-  let barPct = Math.min(Math.abs(sig.score) / maxScore * 100, 100);
+  // 概览卡片
+  let sigClass = sig.verdict.includes("偏多") || sig.verdict.includes("强偏多") ? "signal-card bullish" :
+                 sig.verdict.includes("偏空") || sig.verdict.includes("强偏空") ? "signal-card bearish" : "signal-card neutral";
+  let barPct = Math.min(Math.abs(sig.score) / 6 * 100, 100);
   let barColor = sig.score > 0 ? "#ec2c2c" : sig.score < 0 ? "#19a15f" : "#ff9800";
 
   document.getElementById("cards").innerHTML = `
-    <div class="card ${trendClass}">
-      <div class="label">整体趋势</div>
-      <div class="value" style="font-size:20px">${a.overall_trend}</div>
-    </div>
-    <div class="card ${alignClass}">
-      <div class="label">均线排列</div>
-      <div class="value" style="font-size:18px">${a.ma_alignment.alignment}</div>
-      <div class="sub">${a.ma_alignment.detail}</div>
+    <div class="card signal-card ${a.overall_trend.includes("上升")?"bullish":a.overall_trend.includes("下降")?"bearish":""}">
+      <div class="label">趋势</div>
+      <div class="value" style="font-size:16px">${a.overall_trend}</div>
     </div>
     <div class="card">
-      <div class="label">最新收盘</div>
-      <div class="value">${a.latest_close}</div>
+      <div class="label">收盘</div>
+      <div class="value" style="font-size:16px">${a.latest_close}</div>
       <div class="sub">${a.latest_date}</div>
     </div>
-    <div class="card ${sigVerdictClass}">
+    <div class="card ${sigClass}">
       <div class="label">信号判定</div>
-      <div class="value ${sigVerdictTextClass}">${sig.verdict}</div>
-      <div class="sub">综合评分: ${sig.score > 0 ? '+' : ''}${sig.score}</div>
-      <div class="score-bar-wrap">
-        <div class="score-bar-fill" style="width:${barPct}%;background:${barColor}"></div>
-      </div>
+      <div class="value" style="font-size:16px;color:${sig.score>0?"#ec2c2c":sig.score<0?"#19a15f":"#ff9800"}">${sig.verdict}</div>
+      <div class="sub">评分: ${sig.score>0?"+":""}${sig.score}</div>
+      <div class="score-bar-wrap"><div class="score-bar-fill" style="width:${barPct}%;background:${barColor}"></div></div>
+    </div>
+    <div class="card">
+      <div class="label">因子数</div>
+      <div class="value" style="font-size:16px">${data.factor_count||"--"}</div>
+      <div class="sub">趋势+波动+动量+成交量</div>
     </div>
   `;
 
-  // ── 斜率面板 ──
+  // 斜率
   let slopeHtml = "";
-  for (const [name, info] of Object.entries(a.slopes)) {
-    let dirClass = info.direction === "上升" ? "up" : info.direction === "下降" ? "down" : "flat";
-    let symbol = info.direction === "上升" ? "↑" : info.direction === "下降" ? "↓" : "→";
-    slopeHtml += `
-      <div class="slope-row">
-        <span class="name">${name}</span>
-        <span>${info.value}</span>
-        <span>${info.slope}% ${symbol}</span>
-        <span class="dir ${dirClass}">${info.direction}</span>
-      </div>`;
+  for (const [name, info] of Object.entries(a.slopes||{})) {
+    let dirClass = info.direction==="上升"?"up":info.direction==="下降"?"down":"flat";
+    let sym = info.direction==="上升"?"↑":info.direction==="下降"?"↓":"→";
+    slopeHtml += `<div class="slope-row"><span class="name">${name}</span><span>${info.value}</span><span>${info.slope}% ${sym}</span><span class="dir ${dirClass}">${info.direction}</span></div>`;
   }
-  document.getElementById("slopeContent").innerHTML = slopeHtml;
+  document.getElementById("slopeContent").innerHTML = slopeHtml || '<div style="color:#aaa;font-size:12px">无数据</div>';
 
-  // ── 支撑压力 ──
-  const sr = a.support_resistance;
+  // 支撑压力
+  const sr = a.support_resistance||{};
   document.getElementById("srContent").innerHTML = `
-    <div class="sr-row"><span>当前价</span><strong>${sr.current}</strong></div>
-    <div class="sr-row"><span>支撑位</span><span style="color:#4caf50">${sr.support} (距${sr.pct_to_support}%)</span></div>
-    <div class="sr-row"><span>压力位</span><span style="color:#ec2c2c">${sr.resistance} (+${sr.pct_to_resistance}%)</span></div>
+    <div style="font-size:12px;margin-bottom:4px"><span style="color:#4caf50">支撑:</span> ${sr.support||"--"} <span style="color:#ef5350;margin-left:8px">压力:</span> ${sr.resistance||"--"}</div>
   `;
 
-  // ── 交叉 ──
-  let crossHtml = "";
-  if (a.crosses.length > 0) {
-    a.crosses.slice(-5).reverse().forEach(c => {
-      crossHtml += `
-        <div class="cross-item">
-          <span>${c.date}</span>
-          <span class="${c.type === '金叉' ? 'gold' : 'dead'}">${c.type}</span>
-          <span>${c.ma1} x ${c.ma2}</span>
-        </div>`;
-    });
-  } else {
-    crossHtml = '<div class="cross-item">近期无交叉</div>';
-  }
-  document.getElementById("crossContent").innerHTML = crossHtml;
-
-  // ── 信号面板 ──
+  // 信号
   let sigHtml = "";
-  if (sig.active && sig.active.length > 0) {
-    sig.active.forEach(s => {
-      let badgeClass = s.direction === "bullish" ? "bullish" : s.direction === "bearish" ? "bearish" : "neutral";
-      let dirLabel = s.direction === "bullish" ? "看多" : s.direction === "bearish" ? "看空" : "中性";
-      sigHtml += `
-        <div class="signal-item">
-          <span class="sig-badge ${badgeClass}">${dirLabel}</span>
-          <span>${s.name}</span>
-          <span class="sig-strength">强度:${s.strength}</span>
-          <span class="sig-date">${s.last_date}</span>
-        </div>`;
-    });
-  } else {
-    sigHtml = '<div class="signal-item">近期无信号触发</div>';
-  }
-  document.getElementById("signalContent").innerHTML = sigHtml;
+  (sig.active||[]).forEach(s => {
+    let bc = s.direction==="bullish"?"bullish":s.direction==="bearish"?"bearish":"neutral";
+    let dl = s.direction==="bullish"?"看多":s.direction==="bearish"?"看空":"中性";
+    sigHtml += `<div class="signal-item"><span class="sig-badge ${bc}">${dl}</span><span>${s.name}</span><span style="font-size:10px;color:#999;margin-left:4px">S${s.strength}</span><span class="sig-date">${s.last_date||""}</span></div>`;
+  });
+  document.getElementById("signalContent").innerHTML = sigHtml || '<div style="color:#aaa;font-size:12px">近期无信号</div>';
 
-  // ── 图表 ──
+  // 交叉
+  let crossHtml = "";
+  (a.crosses||[]).slice(-5).reverse().forEach(c => {
+    crossHtml += `<div style="padding:4px 0;font-size:12px;border-bottom:1px solid #f8f8f8"><span style="color:${c.type==="金叉"?"#ec2c2c":"#19a15f"};font-weight:600">${c.type}</span> <span style="color:#888">${c.date}</span> ${c.ma1}×${c.ma2}</div>`;
+  });
+  document.getElementById("crossContent").innerHTML = crossHtml || '<div style="color:#aaa;font-size:12px">无交叉</div>';
+
+  // 图表
   if (data.chart_path) {
-    document.getElementById("chartImg").src = "/api/chart?path=" + encodeURIComponent(data.chart_path);
-    document.getElementById("chartBox").classList.remove("hidden");
+    document.getElementById("chartImg").src = `/api/chart?path=${encodeURIComponent(data.chart_path)}&t=${Date.now()}`;
+  }
+
+  // 加载因子 (异步)
+  loadFactors(ticker, document.getElementById("periodSelect").value);
+}
+
+async function loadFactors(ticker, period) {
+  try {
+    const res = await fetch(`/api/factors/${ticker}?period=${period}`);
+    const data = await res.json();
+    if (data.error) return;
+    const factors = data.factors||{};
+    let html = "<table><tr><th>因子</th><th>类别</th><th>值</th></tr>";
+    for (const [key, f] of Object.entries(factors)) {
+      html += `<tr><td>${f.description}</td><td class="factor-cat">${f.category}</td><td style="font-weight:600">${f.value}</td></tr>`;
+    }
+    html += "</table>";
+    document.getElementById("factorContent").innerHTML = html;
+  } catch(e) {
+    document.getElementById("factorContent").innerHTML = '<div style="color:#aaa">加载失败</div>';
   }
 }
 
-// 支持回车键触发
-document.getElementById("tickerInput").addEventListener("keydown", function(e) {
-  if (e.key === "Enter") analyze();
-});
+async function patternSearch() {
+  const ticker = currentTicker;
+  const type = document.getElementById("searchType").value;
+  const resultsEl = document.getElementById("patternResults");
+  const featEl = document.getElementById("patternFeatures");
+  resultsEl.innerHTML = '<div style="color:#888">搜索中...</div>';
 
-// 页面加载自动分析
+  try {
+    const res = await fetch(`/api/pattern_search/${ticker}?type=${type}&window=30&top_n=5`);
+    const data = await res.json();
+    if (data.error) { resultsEl.innerHTML = `<div style="color:red">${data.error}</div>`; return; }
+
+    // 特征
+    const feat = data.pattern_features||{};
+    featEl.innerHTML = `类型: <b>${feat.pattern_type||"--"}</b> | 回报: ${feat.total_return||"--"}% | 波动: ${feat.volatility||"--"}% | 斜率: ${feat.slope||"--"}`;
+
+    // 结果
+    let html = "";
+    const items = data.similar_periods || data.similar_stocks || [];
+    items.forEach(item => {
+      html += `<div class="search-result">
+        <div><span class="corr">corr=${item.correlation}</span>
+        ${item.ticker?` | 股票: <b>${item.ticker}</b>`:""}
+        ${item.pattern_type?`<span class="pattern-type">${item.pattern_type}</span>`:""}
+        </div>
+        <div style="color:#888;font-size:11px">${item.start_date?item.start_date.slice(0,10):""} ~ ${item.end_date?item.end_date.slice(0,10):""}</div>
+      </div>`;
+    });
+    resultsEl.innerHTML = html || '<div style="color:#aaa">无相似结果</div>';
+  } catch(e) {
+    resultsEl.innerHTML = `<div style="color:red">搜索失败: ${e.message}</div>`;
+  }
+}
+
+// 回车触发
+document.getElementById("tickerInput").addEventListener("keydown", e => { if(e.key==="Enter") analyze() });
+
+// 自动分析
 analyze();
 </script>
 </body>
