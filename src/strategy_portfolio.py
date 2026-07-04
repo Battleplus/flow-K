@@ -41,61 +41,81 @@ class MarketRegime:
 
 def detect_market_regime(df: pd.DataFrame) -> MarketRegime:
     """
-    基于 ADX、均线排列、布林带宽度、RSI 判断市场状态
-    返回最可能的状态 + 每个状态的得分
+    基于 ADX、均线排列、布林带宽度、RSI、价格偏离均线 判断市场状态
+    返回最可能的状态 + 得分 (0-100)
     """
     latest = df.iloc[-1]
 
-    # 特征计算
     adx = latest.get("adx_14", 15)
-    bbw = (latest.get("bb_upper", 0) - latest.get("bb_lower", 1)) / latest.get("bb_mid", 1)
-    bbw_mean = df.get("bb_upper", pd.Series(0, index=df.index)) - df.get("bb_lower", pd.Series(0, index=df.index))
-    bbw_mean = (bbw_mean / df.get("bb_mid", pd.Series(1, index=df.index))).mean()
-    bbw_pct = bbw / bbw_mean if bbw_mean > 0 else 0.5
-
     rsi = latest.get("rsi_14", 50)
-    ma_score = 0
-    if all(c in df.columns for c in ["ma5", "ma10", "ma20", "ma60"]):
-        ma5, ma10, ma20, ma60 = latest["ma5"], latest["ma10"], latest["ma20"], latest["ma60"]
-        if ma5 > ma10 > ma20 > ma60: ma_score = +2
-        elif ma5 < ma10 < ma20 < ma60: ma_score = -2
-        else: ma_score = 0
-
     price = latest["Close"]
     ma20 = latest.get("ma20", price)
+    ma60 = latest.get("ma60", price)
     dist_ma20 = abs(price - ma20) / ma20 if ma20 != 0 else 0
+    dist_ma60 = abs(price - ma60) / ma60 if ma60 != 0 else 0
 
-    # 状态评分 (0-100)
-    scores = {
-        "强趋势上涨": 0.0,
-        "强趋势下跌": 0.0,
-        "震荡市": 0.0,
-        "顶部反转": 0.0,
-        "底部反转": 0.0,
-    }
+    # 计算布林带宽度历史分位
+    bbw = (latest.get("bb_upper", 0) - latest.get("bb_lower", 1)) / latest.get("bb_mid", 1)
+    bbw_series = (df.get("bb_upper", pd.Series(1, index=df.index)) - df.get("bb_lower", pd.Series(1, index=df.index))) / df.get("bb_mid", pd.Series(1, index=df.index))
+    bbw_pct = 0.5
+    if bbw_series.std() > 0:
+        bbw_pct = (bbw - bbw_series.min()) / (bbw_series.max() - bbw_series.min())
+    bbw_pct = np.clip(bbw_pct, 0, 1)
 
-    # 强趋势上涨: 均线多头 + ADX高 + 价格上涨
-    if ma_score > 0 and adx > 25 and price > ma20:
-        scores["强趋势上涨"] = min(100, 60 + adx * 1.2 + dist_ma20 * 500)
-    # 强趋势下跌: 均线空头 + ADX高 + 价格下跌
-    if ma_score < 0 and adx > 25 and price < ma20:
-        scores["强趋势下跌"] = min(100, 60 + adx * 1.2 + dist_ma20 * 500)
+    # 趋势强度: 计算所有均线的得分
+    trend_score = 0
+    if all(c in df.columns for c in ["ma5", "ma10", "ma20", "ma60"]):
+        ma5, ma10, ma20, ma60 = latest["ma5"], latest["ma10"], latest["ma20"], latest["ma60"]
+        checks = [ma5 > ma10, ma10 > ma20, ma20 > ma60, ma5 > ma60]
+        trend_score = sum([1 if c else -1 for c in checks])  # -4 ~ +4
+
+    # 各状态得分
+    scores = {}
+
+    # 强趋势上涨: 趋势分高 + ADX高 + 价格在均线上方
+    if trend_score > 0 and adx > 20 and price > ma20:
+        scores["强趋势上涨"] = min(100, 50 + adx * 0.8 + trend_score * 10 + dist_ma60 * 500)
+    else:
+        scores["强趋势上涨"] = 0
+
+    # 强趋势下跌
+    if trend_score < 0 and adx > 20 and price < ma20:
+        scores["强趋势下跌"] = min(100, 50 + adx * 0.8 + abs(trend_score) * 10 + dist_ma60 * 500)
+    else:
+        scores["强趋势下跌"] = 0
+
     # 震荡市: ADX低 + 布林带收窄 + 均线交织
-    if adx < 20 and bbw_pct < 0.7 and ma_score == 0:
-        scores["震荡市"] = min(100, 80 + (20 - adx) * 1.5)
-    # 顶部反转: 价格偏离均线 + RSI超买 + 动能减弱
-    if rsi > 70 and dist_ma20 > 0.05:
-        scores["顶部反转"] = min(100, 50 + rsi + dist_ma20 * 500)
-    # 底部反转: 价格偏离均线 + RSI超卖 + 缩量企稳
-    if rsi < 30 and dist_ma20 > 0.03:
-        scores["底部反转"] = min(100, 50 + (40 - rsi) + dist_ma20 * 500)
+    adx_score = max(0, 20 - adx) if adx < 20 else 0
+    squeeze_score = (1 - bbw_pct) * 50
+    tangled_score = 10 if abs(trend_score) <= 1 else 0
+    scores["震荡市"] = min(100, adx_score * 2 + squeeze_score + tangled_score)
 
-    # 如果趋势不明显，按ADX默认给震荡市加分
-    if adx < 15 and scores["震荡市"] == 0:
-        scores["震荡市"] = 50
+    # 顶部反转: RSI超买 + 价格偏离均线
+    if rsi > 65 and price > ma20:
+        scores["顶部反转"] = min(100, (rsi - 50) * 1.5 + dist_ma20 * 1000)
+    else:
+        scores["顶部反转"] = 0
 
+    # 底部反转: RSI超卖 + 价格偏离均线
+    if rsi < 40 and price < ma20:
+        scores["底部反转"] = min(100, (40 - rsi) * 2 + abs(dist_ma20) * 1000)
+    else:
+        scores["底部反转"] = 0
+
+    # 如果趋势得分明显, 给趋势状态加基础分
+    if trend_score >= 3:
+        scores["强趋势上涨"] = max(scores.get("强趋势上涨", 0), 30)
+    if trend_score <= -3:
+        scores["强趋势下跌"] = max(scores.get("强趋势下跌", 0), 30)
+
+    # 选择最高分状态
     best_state = max(scores, key=scores.get)
     best_score = scores[best_state]
+
+    # 所有得分都低 -> 默认震荡市
+    if best_score < 5:
+        best_state = "震荡市"
+        best_score = 5
 
     return MarketRegime(
         name=best_state,
