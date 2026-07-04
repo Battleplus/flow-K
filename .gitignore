@@ -1,0 +1,21 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Data files (too large, self-provided)
+*.csv
+
+# Outputs (generated at runtime)
+outputs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
