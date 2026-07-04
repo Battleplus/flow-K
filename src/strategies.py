@@ -899,9 +899,90 @@ def backtest_all(
     return results
 
 
+def _bounded_score(value: float, low: float, high: float) -> float:
+    """Map a metric to 0..1 with clipping."""
+    if not np.isfinite(value) or high <= low:
+        return 0.0
+    return float(np.clip((value - low) / (high - low), 0, 1))
+
+
+def strategy_quality_score(r: BacktestResult) -> int:
+    """
+    面向推荐排序的综合评分。
+    比单独按收益或夏普更稳：同时考虑收益、风险、胜率和交易样本数。
+    """
+    return_score = _bounded_score(r.total_return, -0.10, 0.45) * 26
+    sharpe_score = _bounded_score(r.sharpe_ratio, -0.5, 2.5) * 26
+    drawdown_score = (1 - _bounded_score(abs(r.max_drawdown), 0.04, 0.35)) * 20
+    win_score = _bounded_score(r.win_rate, 0.35, 0.68) * 16
+    trade_score = _bounded_score(r.total_trades, 1, 8) * 12
+    penalty = 0
+    if r.total_trades < 1:
+        penalty += 20
+    if r.total_return < 0 and r.sharpe_ratio < 0:
+        penalty += 12
+    score = return_score + sharpe_score + drawdown_score + win_score + trade_score - penalty
+    return int(round(float(np.clip(score, 0, 100))))
+
+
+def strategy_risk_level(r: BacktestResult) -> str:
+    """把回测风险转成前端可读标签。"""
+    dd = abs(r.max_drawdown)
+    if dd >= 0.25 or r.sharpe_ratio < 0:
+        return "高"
+    if dd >= 0.14 or r.total_trades <= 1:
+        return "中"
+    return "低"
+
+
+def strategy_grade(score: int) -> str:
+    if score >= 80:
+        return "A"
+    if score >= 65:
+        return "B"
+    if score >= 50:
+        return "C"
+    return "D"
+
+
+def strategy_recommendation_reason(r: BacktestResult) -> str:
+    """生成一句人话推荐理由，避免 UI 只堆指标。"""
+    score = strategy_quality_score(r)
+    strengths = []
+    cautions = []
+    if r.total_return > 0:
+        strengths.append(f"收益 {r.total_return * 100:.1f}%")
+    else:
+        cautions.append(f"收益 {r.total_return * 100:.1f}%")
+    if r.sharpe_ratio >= 1:
+        strengths.append(f"夏普 {r.sharpe_ratio:.2f}")
+    elif r.sharpe_ratio < 0:
+        cautions.append("夏普为负")
+    if abs(r.max_drawdown) <= 0.12:
+        strengths.append(f"回撤 {abs(r.max_drawdown) * 100:.1f}%")
+    elif abs(r.max_drawdown) >= 0.22:
+        cautions.append(f"回撤 {abs(r.max_drawdown) * 100:.1f}%")
+    if r.total_trades < 2:
+        cautions.append("样本偏少")
+
+    if score >= 70:
+        prefix = "优先参考"
+    elif score >= 50:
+        prefix = "可作为辅助参考"
+    else:
+        prefix = "暂不建议作为主策略"
+
+    main = "、".join(strengths[:3]) if strengths else "指标表现一般"
+    tail = f"，注意{'、'.join(cautions[:2])}" if cautions else ""
+    return f"{prefix}：{main}{tail}。"
+
+
 def rank_strategies(results: Dict[str, BacktestResult], metric: str = "sharpe_ratio") -> List[Tuple[str, BacktestResult, float]]:
-    """按指定指标排序策略"""
-    ranked = [(sid, r, getattr(r, metric, 0)) for sid, r in results.items()]
+    """按指定指标排序策略，支持 quality_score 综合评分。"""
+    if metric == "quality_score":
+        ranked = [(sid, r, strategy_quality_score(r)) for sid, r in results.items()]
+    else:
+        ranked = [(sid, r, getattr(r, metric, 0)) for sid, r in results.items()]
     ranked.sort(key=lambda x: x[2], reverse=True)
     return ranked
 
@@ -915,6 +996,10 @@ def get_strategy_summary(results: Dict[str, BacktestResult]) -> pd.DataFrame:
             "策略ID": sid,
             "策略名称": r.strategy_name,
             "分类": strat.category,
+            "综合评分": strategy_quality_score(r),
+            "等级": strategy_grade(strategy_quality_score(r)),
+            "风险": strategy_risk_level(r),
+            "推荐理由": strategy_recommendation_reason(r),
             "总收益率": f"{r.total_return * 100:.2f}%",
             "年化收益": f"{r.annual_return * 100:.2f}%",
             "夏普比率": f"{r.sharpe_ratio:.2f}",

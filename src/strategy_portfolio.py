@@ -184,6 +184,7 @@ def select_strategies_by_regime(
     df: pd.DataFrame,
     regime: MarketRegime,
     top_n: int = 5,
+    precomputed_results: Optional[Dict[str, BacktestResult]] = None,
 ) -> List[str]:
     """
     根据市场状态选择最适合的策略类别, 并在该类别中选夏普最高的 top_n
@@ -191,6 +192,11 @@ def select_strategies_by_regime(
     preferred_category = regime.category
     # 收集该类别下的策略
     candidates = [sid for sid, s in STRATEGIES.items() if s.category == preferred_category]
+    if precomputed_results:
+        pool = candidates if len(candidates) >= top_n else candidates + [sid for sid in precomputed_results if sid not in candidates]
+        scored = [(sid, precomputed_results[sid].sharpe_ratio) for sid in pool if sid in precomputed_results]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [sid for sid, _ in scored[:top_n]]
     if len(candidates) < top_n:
         # 类别不足则补充其他类别中夏普高的策略
         others = [sid for sid, s in STRATEGIES.items() if sid not in candidates]
@@ -401,7 +407,8 @@ def backtest_portfolio(
 
 def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
                       worst_case: bool = False, limit_pct: float = 0.0,
-                      hold_profile: str = "medium") -> Dict:
+                      hold_profile: str = "medium",
+                      precomputed_results: Optional[Dict[str, BacktestResult]] = None) -> Dict:
     """
     分析多种组合方式:
       - equal_weight: 等权 Top5 策略
@@ -415,10 +422,12 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
 
     from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES, run_backtest, STRATEGIES
 
-    results = backtest_all(df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct,
-                           hold_profile=hold_profile)
+    results = precomputed_results or backtest_all(
+        df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct,
+        hold_profile=hold_profile,
+    )
     # 长线按收益排名，短线/中线按夏普排名
-    rank_by = "total_return" if hold_profile == "long" else "sharpe_ratio"
+    rank_by = "total_return" if hold_profile == "long" else "quality_score"
     ranked = rank_strategies(results, rank_by)
     top5 = [sid for sid, _, _ in ranked[:5]]
     top10 = [sid for sid, _, _ in ranked[:10]]
@@ -509,7 +518,7 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
     # 状态驱动组合 — 并行分仓
     if "regime" in methods:
         regime = detect_market_regime(df)
-        selected = select_strategies_by_regime(df, regime, top_n=5)
+        selected = select_strategies_by_regime(df, regime, top_n=5, precomputed_results=results)
         r = _parallel_portfolio(selected)
         summary["regime_driven"] = result_to_dict(r)
         summary["regime_driven"]["selected_strategies"] = selected
@@ -573,35 +582,41 @@ def plot_portfolio_equity(
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import matplotlib.font_manager as _fm
+    from src.plot_fonts import configure_chinese_font
 
-    # 字体
-    _FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
-    _fm.fontManager.addfont(_FONT_PATH)
-    _cn_font = _fm.FontProperties(fname=_FONT_PATH)
-    _cn_font_name = _cn_font.get_name()
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = [_cn_font_name, "Microsoft YaHei", "SimHei", "DejaVu Sans"]
-    plt.rcParams["axes.unicode_minus"] = False
+    _cn_font = configure_chinese_font()
 
     close = df["Close"].values
     bh_equity = close / close[0]
     portfolio_equity = portfolio_result.equity_curve.values / portfolio_result.equity_curve.values[0]
     dates = pd.to_datetime(df["Date"]).values
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(dates, portfolio_equity, label=f"{method_name}", color="#0984e3", linewidth=2)
-    ax.plot(dates, bh_equity, label="买入持有", color="#95a5a6", linewidth=1.5, linestyle="--")
-    ax.axhline(1.0, color="#ccc", linewidth=0.5)
-    ax.set_title(f"{ticker} {method_name} 权益曲线", fontproperties=_cn_font, fontsize=14)
-    ax.set_xlabel("日期", fontproperties=_cn_font)
-    ax.set_ylabel("净值", fontproperties=_cn_font)
-    ax.legend(prop=_cn_font, loc="upper left")
-    ax.grid(True, alpha=0.3)
+    bg = "#131722"
+    panel = "#171b26"
+    grid = "#242833"
+    text = "#d1d4dc"
+    muted = "#787b86"
+    blue = "#2962ff"
+
+    fig, ax = plt.subplots(figsize=(12, 6), facecolor=bg)
+    ax.set_facecolor(panel)
+    ax.plot(dates, portfolio_equity, label=f"{method_name}", color=blue, linewidth=2.4)
+    ax.plot(dates, bh_equity, label="买入持有", color="#8a9bab", linewidth=1.4, linestyle="--")
+    ax.axhline(1.0, color="#3a404d", linewidth=0.8)
+    ax.set_title(f"{ticker} {method_name} 权益曲线", fontproperties=_cn_font, fontsize=14, color="#f0f3fa", pad=12)
+    ax.set_xlabel("日期", fontproperties=_cn_font, color=muted)
+    ax.set_ylabel("净值", fontproperties=_cn_font, color=muted)
+    ax.tick_params(colors=muted, labelsize=9)
+    for spine in ax.spines.values():
+        spine.set_color("#2a2e39")
+    legend = ax.legend(prop=_cn_font, loc="upper left", facecolor=panel, edgecolor="#2a2e39", framealpha=0.92)
+    for label in legend.get_texts():
+        label.set_color(text)
+    ax.grid(True, color=grid, linewidth=0.8, alpha=0.9)
 
     out_dir = Path(__file__).resolve().parent.parent / "outputs" / "charts"
     out_dir.mkdir(parents=True, exist_ok=True)
     path = str(out_dir / f"{ticker}_portfolio_equity.png")
-    fig.savefig(path, dpi=120, bbox_inches="tight", facecolor="white")
+    fig.savefig(path, dpi=120, bbox_inches="tight", facecolor=bg)
     plt.close(fig)
     return path

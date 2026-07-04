@@ -21,6 +21,25 @@ app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 
 # 缓存股票列表
 _TICKERS_CACHE = None
+_CACHE_TTL_SECONDS = 300
+_CACHE_MAX_ITEMS = 64
+_DATA_CACHE = {}
+_FACTOR_CACHE = {}
+_BACKTEST_CACHE = {}
+_PORTFOLIO_CACHE = {}
+_DASHBOARD_CACHE = {}
+_CACHE_STATS = {
+    "data_hits": 0,
+    "data_misses": 0,
+    "factor_hits": 0,
+    "factor_misses": 0,
+    "backtest_hits": 0,
+    "backtest_misses": 0,
+    "portfolio_hits": 0,
+    "portfolio_misses": 0,
+    "dashboard_hits": 0,
+    "dashboard_misses": 0,
+}
 
 def _load_tickers():
     global _TICKERS_CACHE
@@ -60,6 +79,230 @@ def _load_tickers():
     return result
 
 
+def _cache_get(store, key, stat_hit=None, stat_miss=None):
+    entry = store.get(key)
+    now = time.time()
+    if entry and now - entry["ts"] <= _CACHE_TTL_SECONDS:
+        if stat_hit:
+            _CACHE_STATS[stat_hit] += 1
+        return entry["value"], True
+    if entry:
+        store.pop(key, None)
+    if stat_miss:
+        _CACHE_STATS[stat_miss] += 1
+    return None, False
+
+
+def _cache_put(store, key, value):
+    if len(store) >= _CACHE_MAX_ITEMS:
+        oldest = min(store, key=lambda k: store[k]["ts"])
+        store.pop(oldest, None)
+    store[key] = {"ts": time.time(), "value": value}
+
+
+def _cached_fetch_data(ticker: str, period: str, interval: str = "1d"):
+    key = (ticker.strip().upper(), period, interval)
+    cached, hit = _cache_get(_DATA_CACHE, key, "data_hits", "data_misses")
+    if hit:
+        return cached.copy(), {"data": "hit"}
+    df = fetch_data(ticker, period=period, interval=interval)
+    _cache_put(_DATA_CACHE, key, df.copy())
+    return df.copy(), {"data": "miss"}
+
+
+def _factor_data(ticker: str, period: str):
+    key = (ticker.strip().upper(), period)
+    cached, hit = _cache_get(_FACTOR_CACHE, key, "factor_hits", "factor_misses")
+    if hit:
+        return cached.copy(), {"factor": "hit", "data": "skip"}
+    df, cache_info = _cached_fetch_data(ticker, period)
+    df = add_all_factors(df)
+    _cache_put(_FACTOR_CACHE, key, df.copy())
+    cache_info["factor"] = "miss"
+    return df.copy(), cache_info
+
+
+def _cached_backtest_all(df, ticker: str, period: str, capital: float,
+                         worst_case: bool, limit_pct: float, hold_profile: str,
+                         min_trades: int = 1):
+    from src.strategies import backtest_all
+
+    key = (
+        ticker.strip().upper(), period, round(float(capital), 2),
+        bool(worst_case), round(float(limit_pct), 4), hold_profile, int(min_trades),
+    )
+    cached, hit = _cache_get(_BACKTEST_CACHE, key, "backtest_hits", "backtest_misses")
+    if hit:
+        return cached, {"backtest": "hit"}
+    results = backtest_all(
+        df, initial_capital=capital, min_trades=min_trades,
+        worst_case=worst_case, limit_pct=limit_pct, hold_profile=hold_profile,
+    )
+    _cache_put(_BACKTEST_CACHE, key, results)
+    return results, {"backtest": "miss"}
+
+
+def _with_meta(payload: dict, started_at: float, cache_info: dict | None = None):
+    meta = payload.get("meta", {}) if isinstance(payload.get("meta", {}), dict) else {}
+    meta["elapsed_ms"] = round((time.perf_counter() - started_at) * 1000, 1)
+    if cache_info:
+        meta["cache"] = cache_info
+    meta["cache_stats"] = dict(_CACHE_STATS)
+    payload["meta"] = meta
+    return jsonify(payload)
+
+
+def _strategy_payload(r, strategy=None):
+    from src.strategies import (
+        STRATEGIES, strategy_quality_score, strategy_grade,
+        strategy_risk_level, strategy_recommendation_reason,
+    )
+
+    strat = strategy or STRATEGIES.get(r.strategy_id)
+    score = strategy_quality_score(r)
+    return {
+        "name": r.strategy_name,
+        "category": strat.category if strat else "",
+        "description": strat.description if strat else "",
+        "quality_score": score,
+        "grade": strategy_grade(score),
+        "risk_level": strategy_risk_level(r),
+        "recommendation_reason": strategy_recommendation_reason(r),
+        "total_return": f"{r.total_return * 100:.2f}%",
+        "annual_return": f"{r.annual_return * 100:.2f}%",
+        "sharpe_ratio": f"{r.sharpe_ratio:.2f}",
+        "max_drawdown": f"{r.max_drawdown * 100:.2f}%",
+        "win_rate": f"{r.win_rate * 100:.1f}%",
+        "total_trades": r.total_trades,
+        "avg_return_per_trade": f"{r.avg_return_per_trade * 100:.2f}%",
+        "avg_hold_days": f"{r.avg_hold_days:.0f}天",
+        "profit_factor": f"{r.profit_factor:.2f}",
+    }
+
+
+def _strategy_markers(df, ranked, max_strategies: int = 2, max_markers: int = 24):
+    markers = []
+    colors = ["#26a69a", "#2962ff", "#f5c542"]
+    for rank, (sid, r, _) in enumerate(ranked[:max_strategies]):
+        series = r.signal_series.reindex(df.index).fillna(0)
+        idxs = np.where(series.values != 0)[0]
+        if len(idxs) > 12:
+            idxs = idxs[-12:]
+        for idx in idxs:
+            sig = int(series.iloc[idx])
+            is_buy = sig > 0
+            markers.append({
+                "time": str(df["Date"].iloc[idx])[:10],
+                "position": "belowBar" if is_buy else "aboveBar",
+                "color": colors[rank % len(colors)] if is_buy else "#ef5350",
+                "shape": "arrowUp" if is_buy else "arrowDown",
+                "text": "买" if is_buy else "卖",
+                "strategy_id": sid,
+                "strategy_name": r.strategy_name,
+                "signal": sig,
+            })
+    markers.sort(key=lambda item: item["time"])
+    return markers[-max_markers:]
+
+
+def _latest_factors_payload(df, ticker: str):
+    from src.factors import FACTOR_META
+
+    latest = df.iloc[-1]
+    factors = {}
+    for key, (category, desc, _, _) in FACTOR_META.items():
+        if key in latest.index:
+            val = latest[key]
+            if pd.isna(val):
+                continue
+            factors[key] = {
+                "category": category,
+                "description": desc,
+                "value": round(float(val), 4) if not pd.isna(val) else None,
+            }
+    return {
+        "ticker": ticker.upper(),
+        "date": str(df["Date"].iloc[-1]),
+        "factors": factors,
+    }
+
+
+def _build_portfolio_payload(df, ticker: str, period: str, hold_profile: str,
+                             worst_case: bool, limit_pct: float, include_chart: bool,
+                             bt_all: dict):
+    from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
+    from src.strategies import rank_strategies, HOLD_PROFILES
+
+    summary = analyze_portfolio(
+        df, worst_case=worst_case, limit_pct=limit_pct,
+        hold_profile=hold_profile, precomputed_results=bt_all,
+    )
+
+    hp = HOLD_PROFILES[hold_profile]
+    ranked = rank_strategies(bt_all, "quality_score")
+    top5 = [sid for sid, _, _ in ranked[:5]]
+    portfolio_result = backtest_portfolio(
+        df, top5, worst_case=worst_case, limit_pct=limit_pct,
+        stop_loss_pct=hp["sl"], take_profit_pct=hp["tp"],
+        hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"],
+    )
+    chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合") if include_chart else None
+
+    close = df["Close"].astype(float).values
+    portfolio_values = portfolio_result.equity_curve.astype(float).values
+    if len(close) and len(portfolio_values):
+        buy_hold_equity = close / close[0]
+        portfolio_equity = portfolio_values / portfolio_values[0]
+        running_peak = np.maximum.accumulate(portfolio_equity)
+        drawdown = (portfolio_equity - running_peak) / running_peak
+        equity_curve = [
+            {
+                "date": str(df["Date"].iloc[i])[:10],
+                "portfolio": round(float(portfolio_equity[i]), 5),
+                "buy_hold": round(float(buy_hold_equity[i]), 5),
+                "drawdown": round(float(drawdown[i] * 100), 2),
+            }
+            for i in range(min(len(df), len(portfolio_equity), len(buy_hold_equity)))
+        ]
+    else:
+        equity_curve = []
+
+    return {
+        "ticker": ticker.upper(),
+        "period": period,
+        "hold_profile": hold_profile,
+        "hold_label": HOLD_PROFILES[hold_profile]["label"],
+        "hold_params": {
+            "hold_min": hp["hold_min"], "hold_max": hp["hold_max"],
+            "stop_loss_pct": round(hp["sl"] * 100, 1), "take_profit_pct": round(hp["tp"] * 100, 1),
+        },
+        "market_regime": summary.get("regime_info", {}),
+        "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
+        "buy_hold": summary.get("buy_hold", {}),
+        "top_strategies": summary.get("top_strategies", []),
+        "portfolio_chart_path": chart_path,
+        "equity_curve": equity_curve,
+        "selected_strategies": top5,
+    }
+
+
+def _cached_portfolio_payload(df, ticker: str, period: str, hold_profile: str,
+                              worst_case: bool, limit_pct: float, include_chart: bool,
+                              bt_all: dict):
+    key = (
+        ticker.strip().upper(), period, hold_profile, bool(worst_case),
+        round(float(limit_pct), 4), bool(include_chart),
+    )
+    cached, hit = _cache_get(_PORTFOLIO_CACHE, key, "portfolio_hits", "portfolio_misses")
+    if hit:
+        return cached, {"portfolio": "hit"}
+    payload = _build_portfolio_payload(
+        df, ticker, period, hold_profile, worst_case, limit_pct, include_chart, bt_all,
+    )
+    _cache_put(_PORTFOLIO_CACHE, key, payload)
+    return payload, {"portfolio": "miss"}
+
+
 @app.route("/api/tickers")
 def api_tickers():
     """返回所有可用股票代码+名称+行业，供下拉选择"""
@@ -91,18 +334,19 @@ def api_chart():
 
 @app.route("/api/analyze/<ticker>")
 def api_analyze(ticker):
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     mode = request.args.get("mode", "multi")
+    include_chart = request.args.get("chart", "false").lower() in ("true", "1", "yes")
     try:
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
         analysis = trend_analysis(df)
         df_sig = detect_all(df)
         sig = signal_summary(df_sig)
         active = get_active_signals(df_sig, recent_days=5)
-        chart_path = plot_kline_trend(df, ticker, analysis, sig, mode=mode)
+        chart_path = plot_kline_trend(df, ticker, analysis, sig, mode=mode) if include_chart else None
 
-        return jsonify({
+        return _with_meta({
             "ticker": ticker.upper(),
             "period": period,
             "mode": mode,
@@ -120,7 +364,7 @@ def api_analyze(ticker):
                 "active": active,
             },
             "chart_path": chart_path,
-        })
+        }, started_at, cache_info)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -130,13 +374,13 @@ def api_analyze(ticker):
 
 @app.route("/api/signals/<ticker>")
 def api_signals(ticker):
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     try:
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
         df = detect_all(df)
         sig = signal_summary(df)
-        return jsonify({"ticker": ticker.upper(), "period": period, "signals": sig})
+        return _with_meta({"ticker": ticker.upper(), "period": period, "signals": sig}, started_at, cache_info)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -171,6 +415,7 @@ def api_backtest(ticker):
       worst_case: 最差执行模式 (true/false, 默认true)
       limit:      涨跌停限制百分比 (0=关闭, 默认0, 例如 limit=0.1 表示单日涨跌超10%禁止交易)
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     strategy_id = request.args.get("strategy", None)
     capital = float(request.args.get("capital", 100000))
@@ -181,10 +426,13 @@ def api_backtest(ticker):
         hold_profile = "medium"
 
     try:
-        from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary, HOLD_PROFILES
+        from src.strategies import (
+            STRATEGIES, backtest_strategy, get_strategy_summary, HOLD_PROFILES,
+            rank_strategies, strategy_quality_score, strategy_grade,
+            strategy_risk_level, strategy_recommendation_reason,
+        )
 
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
 
         if strategy_id:
             if strategy_id not in STRATEGIES:
@@ -192,11 +440,16 @@ def api_backtest(ticker):
             r = backtest_strategy(df, strategy_id, initial_capital=capital,
                                   worst_case=worst_case, limit_pct=limit_pct,
                                   hold_override=HOLD_PROFILES[hold_profile])
+            score = strategy_quality_score(r)
             result = {
                 "ticker": ticker.upper(),
                 "period": period,
                 "strategy_id": strategy_id,
                 "strategy_name": r.strategy_name,
+                "quality_score": score,
+                "grade": strategy_grade(score),
+                "risk_level": strategy_risk_level(r),
+                "recommendation_reason": strategy_recommendation_reason(r),
                 "total_return": round(r.total_return * 100, 2),
                 "annual_return": round(r.annual_return * 100, 2),
                 "sharpe_ratio": round(r.sharpe_ratio, 2),
@@ -213,10 +466,14 @@ def api_backtest(ticker):
                 "recent_signals": r.signal_series.iloc[-20:].tolist(),
             }
         else:
-            results = backtest_all(df, initial_capital=capital, min_trades=1,
-                                   worst_case=worst_case, limit_pct=limit_pct,
-                                   hold_profile=hold_profile)
+            results, bt_cache = _cached_backtest_all(
+                df, ticker, period, capital, worst_case, limit_pct, hold_profile,
+                min_trades=1,
+            )
+            cache_info.update(bt_cache)
             summary_df = get_strategy_summary(results)
+            ranked_by_score = rank_strategies(results, "quality_score")
+            ranked_by_sharpe = rank_strategies(results, "sharpe_ratio")
             result = {
                 "ticker": ticker.upper(),
                 "period": period,
@@ -224,28 +481,29 @@ def api_backtest(ticker):
                 "hold_label": HOLD_PROFILES[hold_profile]["label"],
                 "worst_case": worst_case,
                 "strategies": {},
+                "ranked_by_score": [],
                 "ranked_by_sharpe": [],
+                "signal_markers": _strategy_markers(df, ranked_by_score),
+                "recommendation": {},
             }
             for _, row in summary_df.iterrows():
                 sid = row["策略ID"]
-                result["strategies"][sid] = {
-                    "name": row["策略名称"],
-                    "category": row["分类"],
-                    "total_return": row["总收益率"],
-                    "annual_return": row["年化收益"],
-                    "sharpe_ratio": row["夏普比率"],
-                    "max_drawdown": row["最大回撤"],
-                    "win_rate": row["胜率"],
-                    "total_trades": row["交易次数"],
-                    "avg_return_per_trade": row["平均收益"],
-                    "avg_hold_days": row["平均持仓"],
-                    "profit_factor": row["盈亏比"],
+                result["strategies"][sid] = _strategy_payload(results[sid], STRATEGIES.get(sid))
+            result["ranked_by_score"] = [sid for sid, _, _ in ranked_by_score]
+            result["ranked_by_sharpe"] = [sid for sid, _, _ in ranked_by_sharpe]
+            if ranked_by_score:
+                top_sid, top_result, top_score = ranked_by_score[0]
+                result["recommendation"] = {
+                    "primary_strategy_id": top_sid,
+                    "primary_strategy": top_result.strategy_name,
+                    "score": int(top_score),
+                    "grade": strategy_grade(int(top_score)),
+                    "risk_level": strategy_risk_level(top_result),
+                    "reason": strategy_recommendation_reason(top_result),
+                    "rank_basis": "综合评分综合收益、夏普、最大回撤、胜率和交易样本数",
                 }
-            from src.strategies import rank_strategies
-            ranked = rank_strategies(results, "sharpe_ratio")
-            result["ranked_by_sharpe"] = [sid for sid, _, _ in ranked]
 
-        return jsonify(result)
+        return _with_meta(result, started_at, cache_info)
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -257,12 +515,12 @@ def api_consensus(ticker):
     获取多策略共识信号
     返回所有策略的最新信号 + 综合评分
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     try:
         from src.strategies import get_latest_consensus, aggregate_signals
 
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
 
         consensus = get_latest_consensus(df)
 
@@ -271,14 +529,14 @@ def api_consensus(ticker):
         recent = agg.iloc[-60:][["aggregate_score", "bullish_ratio"]].copy()
         recent["date"] = df["Date"].iloc[-60:].values
 
-        return jsonify({
+        return _with_meta({
             "ticker": ticker.upper(),
             "consensus": consensus,
             "trend": [
                 {"date": str(row["date"])[:10], "score": float(row["aggregate_score"]), "ratio": float(row["bullish_ratio"])}
                 for _, row in recent.iterrows()
             ],
-        })
+        }, started_at, cache_info)
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -294,48 +552,157 @@ def api_portfolio(ticker):
       - 买入持有基准
       - 组合权益曲线图
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
     limit_pct = float(request.args.get("limit", 0))
     hold_profile = request.args.get("hold", "medium")
     if hold_profile not in ("short", "medium", "long"):
         hold_profile = "medium"
+    include_chart = request.args.get("chart", "false").lower() in ("true", "1", "yes")
 
     try:
-        from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
-        from src.strategies import backtest_all, rank_strategies, HOLD_PROFILES
+        df, cache_info = _factor_data(ticker, period)
+        bt_all, bt_cache = _cached_backtest_all(
+            df, ticker, period, 100000, worst_case, limit_pct, hold_profile,
+            min_trades=1,
+        )
+        cache_info.update(bt_cache)
+        payload, portfolio_cache = _cached_portfolio_payload(
+            df, ticker, period, hold_profile, worst_case, limit_pct, include_chart, bt_all,
+        )
+        cache_info.update(portfolio_cache)
+        return _with_meta(payload.copy(), started_at, cache_info)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
 
-        summary = analyze_portfolio(df, worst_case=worst_case, limit_pct=limit_pct,
-                                    hold_profile=hold_profile)
+@app.route("/api/dashboard/<ticker>")
+def api_dashboard(ticker):
+    """主页面聚合接口：一次请求复用行情、因子、回测和组合中间结果。"""
+    started_at = time.perf_counter()
+    period = request.args.get("period", "1y")
+    mode = request.args.get("mode", "multi")
+    capital = float(request.args.get("capital", 100000))
+    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
+    limit_pct = float(request.args.get("limit", 0))
+    hold_profile = request.args.get("hold", "medium")
+    if hold_profile not in ("short", "medium", "long"):
+        hold_profile = "medium"
+    include_chart = request.args.get("chart", "false").lower() in ("true", "1", "yes")
+    dashboard_key = (
+        ticker.strip().upper(), period, mode, round(float(capital), 2),
+        bool(worst_case), round(float(limit_pct), 4), hold_profile, bool(include_chart),
+    )
+    cached_dashboard, dashboard_hit = _cache_get(
+        _DASHBOARD_CACHE, dashboard_key, "dashboard_hits", "dashboard_misses",
+    )
+    if dashboard_hit:
+        payload = cached_dashboard.copy()
+        return _with_meta(payload, started_at, {"dashboard": "hit"})
 
-        hp = HOLD_PROFILES[hold_profile]
-        bt_all = backtest_all(df, worst_case=worst_case, limit_pct=limit_pct,
-                              hold_profile=hold_profile)
-        ranked = rank_strategies(bt_all, "sharpe_ratio")
-        top5 = [sid for sid, _, _ in ranked[:5]]
-        portfolio_result = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct,
-                                              stop_loss_pct=hp["sl"], take_profit_pct=hp["tp"],
-                                              hold_days_min=hp["hold_min"], hold_days_max=hp["hold_max"])
-        chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
+    try:
+        from src.strategies import (
+            get_strategy_summary, rank_strategies, strategy_grade,
+            strategy_risk_level, strategy_recommendation_reason,
+            get_latest_consensus, aggregate_signals, HOLD_PROFILES, STRATEGIES,
+        )
 
-        return jsonify({
+        df, cache_info = _factor_data(ticker, period)
+
+        analysis = trend_analysis(df)
+        df_sig = detect_all(df)
+        sig = signal_summary(df_sig)
+        active = get_active_signals(df_sig, recent_days=5)
+        chart_path = plot_kline_trend(df, ticker, analysis, sig, mode=mode) if include_chart else None
+        analyze_payload = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "mode": mode,
+            "data_start": str(df["Date"].min()),
+            "data_end": str(df["Date"].max()),
+            "records": len(df),
+            "factor_count": len(df.columns),
+            "analysis": analysis,
+            "signals": {
+                "score": sig["score"],
+                "verdict": sig["verdict"],
+                "bullish_count": sig["bullish_count"],
+                "bearish_count": sig["bearish_count"],
+                "neutral_count": sig["neutral_count"],
+                "active": active,
+            },
+            "chart_path": chart_path,
+        }
+
+        results, bt_cache = _cached_backtest_all(
+            df, ticker, period, capital, worst_case, limit_pct, hold_profile,
+            min_trades=1,
+        )
+        cache_info.update(bt_cache)
+        summary_df = get_strategy_summary(results)
+        ranked_by_score = rank_strategies(results, "quality_score")
+        ranked_by_sharpe = rank_strategies(results, "sharpe_ratio")
+        backtest_payload = {
             "ticker": ticker.upper(),
             "period": period,
             "hold_profile": hold_profile,
             "hold_label": HOLD_PROFILES[hold_profile]["label"],
-            "hold_params": {
-                "hold_min": hp["hold_min"], "hold_max": hp["hold_max"],
-                "stop_loss_pct": round(hp["sl"] * 100, 1), "take_profit_pct": round(hp["tp"] * 100, 1),
-            },
-            "market_regime": summary.get("regime_info", {}),
-            "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
-            "buy_hold": summary.get("buy_hold", {}),
-            "top_strategies": summary.get("top_strategies", []),
-            "portfolio_chart_path": chart_path,
-        })
+            "worst_case": worst_case,
+            "strategies": {},
+            "ranked_by_score": [sid for sid, _, _ in ranked_by_score],
+            "ranked_by_sharpe": [sid for sid, _, _ in ranked_by_sharpe],
+            "signal_markers": _strategy_markers(df, ranked_by_score),
+            "recommendation": {},
+        }
+        for _, row in summary_df.iterrows():
+            sid = row["策略ID"]
+            backtest_payload["strategies"][sid] = _strategy_payload(results[sid], STRATEGIES.get(sid))
+        if ranked_by_score:
+            top_sid, top_result, top_score = ranked_by_score[0]
+            backtest_payload["recommendation"] = {
+                "primary_strategy_id": top_sid,
+                "primary_strategy": top_result.strategy_name,
+                "score": int(top_score),
+                "grade": strategy_grade(int(top_score)),
+                "risk_level": strategy_risk_level(top_result),
+                "reason": strategy_recommendation_reason(top_result),
+                "rank_basis": "综合评分综合收益、夏普、最大回撤、胜率和交易样本数",
+            }
+
+        consensus = get_latest_consensus(df)
+        agg = aggregate_signals(df)
+        recent = agg.iloc[-60:][["aggregate_score", "bullish_ratio"]].copy()
+        recent["date"] = df["Date"].iloc[-60:].values
+        consensus_payload = {
+            "ticker": ticker.upper(),
+            "consensus": consensus,
+            "trend": [
+                {"date": str(row["date"])[:10], "score": float(row["aggregate_score"]), "ratio": float(row["bullish_ratio"])}
+                for _, row in recent.iterrows()
+            ],
+        }
+
+        portfolio_payload, portfolio_cache = _cached_portfolio_payload(
+            df, ticker, period, hold_profile, worst_case, limit_pct, include_chart, results,
+        )
+        cache_info.update(portfolio_cache)
+
+        payload = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "analyze": analyze_payload,
+            "backtest": backtest_payload,
+            "consensus": consensus_payload,
+            "portfolio": portfolio_payload,
+            "factors": _latest_factors_payload(df, ticker),
+        }
+        _cache_put(_DASHBOARD_CACHE, dashboard_key, payload.copy())
+        cache_info["dashboard"] = "miss"
+        return _with_meta(payload, started_at, cache_info)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -347,6 +714,7 @@ def api_strategy_chart(ticker):
     生成策略组合分析图
     包含: K线 + 多策略信号标注 + 权益曲线
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     strategy_id = request.args.get("strategy", None)
 
@@ -355,22 +723,14 @@ def api_strategy_chart(ticker):
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import matplotlib.font_manager as _fm
         import mplfinance as mpf
         import numpy as np
         import pandas as pd
+        from src.plot_fonts import configure_chinese_font
 
-        # 中文字体设置
-        _FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
-        _fm.fontManager.addfont(_FONT_PATH)
-        _cn_font = _fm.FontProperties(fname=_FONT_PATH)
-        _cn_font_name = _cn_font.get_name()
-        plt.rcParams["font.family"] = "sans-serif"
-        plt.rcParams["font.sans-serif"] = [_cn_font_name, "Microsoft YaHei", "SimHei", "DejaVu Sans"]
-        plt.rcParams["axes.unicode_minus"] = False
+        _cn_font = configure_chinese_font()
 
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
 
         # 生成K线底图
         df_plot = df.copy()
@@ -455,11 +815,11 @@ def api_strategy_chart(ticker):
         fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
         plt.close(fig)
 
-        return jsonify({
+        return _with_meta({
             "ticker": ticker.upper(),
             "chart_path": path,
             "strategies_shown": selected,
-        })
+        }, started_at, cache_info)
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -469,6 +829,7 @@ def api_strategy_chart(ticker):
 
 @app.route("/api/pattern_search/<ticker>")
 def api_pattern_search(ticker):
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     window = int(request.args.get("window", 30))
     top_n = int(request.args.get("top_n", 5))
@@ -477,8 +838,7 @@ def api_pattern_search(ticker):
         from src.pattern_search import (
             search_historical_similar, search_cross_stock_similar, get_pattern_features,
         )
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
         result = {"ticker": ticker.upper(), "type": search_type}
         if search_type == "historical":
             similar = search_historical_similar(df, window=window, top_n=top_n)
@@ -491,7 +851,7 @@ def api_pattern_search(ticker):
                 if other == ticker.upper():
                     continue
                 try:
-                    other_df = fetch_data(other, period=period)
+                    other_df, _ = _cached_fetch_data(other, period)
                     candidates.append(other_df)
                     candidate_names.append(other)
                 except Exception:
@@ -499,7 +859,7 @@ def api_pattern_search(ticker):
             similar = search_cross_stock_similar(df, candidates, candidate_names, window=window, top_n=top_n)
             result["similar_stocks"] = similar
             result["pattern_features"] = get_pattern_features(df, window=window)
-        return jsonify(result)
+        return _with_meta(result, started_at, cache_info)
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -519,13 +879,13 @@ def api_daily(ticker):
       fields: 返回字段，逗号分隔 (open,high,low,close,volume,ma5,ma10...)
               不传则返回全部可用字段
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     limit = request.args.get("limit", None)
     fields = request.args.get("fields", None)
 
     try:
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
 
         if limit:
             limit = int(limit)
@@ -555,14 +915,14 @@ def api_daily(ticker):
                     rec[col] = val
             records.append(rec)
 
-        return jsonify({
+        return _with_meta({
             "ticker": ticker.upper(),
             "period": period,
             "total_records": len(df),
             "returned_records": len(records),
             "available_fields": [c for c in df.columns if c != "Date"],
             "data": records,
-        })
+        }, started_at, cache_info)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -578,6 +938,7 @@ def api_daily_summary(ticker):
       period: 数据周期 (默认1y，用于因子计算历史)
       date:   指定日期 (可选，默认最新交易日)
     """
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     date = request.args.get("date", None)
 
@@ -585,8 +946,7 @@ def api_daily_summary(ticker):
         from src.strategies import get_latest_consensus, STRATEGIES, backtest_all, rank_strategies
         from src.factors import FACTOR_META
 
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
+        df, cache_info = _factor_data(ticker, period)
         df_sig = detect_all(df)
 
         # 指定日期或最新
@@ -638,7 +998,7 @@ def api_daily_summary(ticker):
             chg = 0
             chg_pct = 0
 
-        return jsonify({
+        return _with_meta({
             "ticker": ticker.upper(),
             "date": str(target_date)[:10],
             "ohlcv": ohlcv,
@@ -655,7 +1015,7 @@ def api_daily_summary(ticker):
                 "active": active,
             },
             "strategy_consensus": consensus,
-        })
+        }, started_at, cache_info)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -752,28 +1112,11 @@ def api_quotes_batch():
 
 @app.route("/api/factors/<ticker>")
 def api_factors(ticker):
+    started_at = time.perf_counter()
     period = request.args.get("period", "1y")
     try:
-        df = fetch_data(ticker, period=period)
-        df = add_all_factors(df)
-        latest = df.iloc[-1]
-        from src.factors import FACTOR_META
-        factors = {}
-        for key, (category, desc, _, _) in FACTOR_META.items():
-            if key in latest.index:
-                val = latest[key]
-                if pd.isna(val):
-                    continue
-                factors[key] = {
-                    "category": category,
-                    "description": desc,
-                    "value": round(float(val), 4) if not pd.isna(val) else None,
-                }
-        return jsonify({
-            "ticker": ticker.upper(),
-            "date": str(df["Date"].iloc[-1]),
-            "factors": factors,
-        })
+        df, cache_info = _factor_data(ticker, period)
+        return _with_meta(_latest_factors_payload(df, ticker), started_at, cache_info)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
