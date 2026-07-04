@@ -12,6 +12,7 @@ from src.indicators import trend_analysis
 from src.patterns import add_indicators, detect_all, signal_summary, get_active_signals
 from src.chart import plot_kline_trend
 from src.factors import add_all_factors
+from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity
 
 app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="")
 
@@ -202,6 +203,49 @@ def api_consensus(ticker):
                 {"date": str(row["date"])[:10], "score": float(row["aggregate_score"]), "ratio": float(row["bullish_ratio"])}
                 for _, row in recent.iterrows()
             ],
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/portfolio/<ticker>")
+def api_portfolio(ticker):
+    """
+    策略组合分析
+    返回:
+      - 市场状态识别
+      - 多种组合方式回测结果 (等权/夏普加权/状态驱动/动态波动率)
+      - 买入持有基准
+      - 组合权益曲线图
+    """
+    period = request.args.get("period", "1y")
+    try:
+        from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity
+        from src.strategies import backtest_all, rank_strategies, backtest_strategy
+
+        df = fetch_data(ticker, period=period)
+        df = add_all_factors(df)
+
+        summary = analyze_portfolio(df)
+
+        # 生成最佳组合的权益曲线图 (选等权组合作为展示)
+        ranked = rank_strategies(backtest_all(df), "sharpe_ratio")
+        top5 = [sid for sid, _, _ in ranked[:5]]
+        r = backtest_strategy(df, "portfolio") if False else backtest_strategy(df, top5[0])
+        # 用等权组合重新回测
+        from src.strategy_portfolio import backtest_portfolio
+        portfolio_result = backtest_portfolio(df, top5)
+        chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
+
+        return jsonify({
+            "ticker": ticker.upper(),
+            "period": period,
+            "market_regime": summary.get("regime_info", {}),
+            "portfolios": {k: v for k, v in summary.items() if k not in ["buy_hold", "top_strategies", "regime_info"]},
+            "buy_hold": summary.get("buy_hold", {}),
+            "top_strategies": summary.get("top_strategies", []),
+            "portfolio_chart_path": chart_path,
         })
     except Exception as e:
         import traceback
