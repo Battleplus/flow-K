@@ -271,12 +271,18 @@ def backtest_portfolio(
     stop_loss_pct: float = 0.07,
     take_profit_pct: float = 0.12,
     hold_days_max: int = 30,
+    worst_case: bool = False,
+    limit_pct: float = 0.0,
 ) -> BacktestResult:
     """
     组合信号回测 (单只股票)
+    worst_case: 买入用当日最高价、卖出用当日最低价
+    limit_pct: 单日涨跌超此比例暂停交易
     """
     signals = combine_signals(df, selected_strategies, weights)
     close = df["Close"].values
+    high = df["High"].values if worst_case and "High" in df.columns else close
+    low = df["Low"].values if worst_case and "Low" in df.columns else close
     n = len(close)
     equity = np.ones(n) * initial_capital
     position = 0
@@ -288,6 +294,13 @@ def backtest_portfolio(
     for i in range(n):
         price = close[i]
         sig_val = signals.iloc[i]
+
+        # 涨跌停检查
+        day_limited = False
+        if limit_pct > 0 and i > 0:
+            day_change = abs((close[i] - close[i - 1]) / close[i - 1])
+            if day_change >= limit_pct:
+                day_limited = True
 
         # 有持仓
         if position > 0:
@@ -303,14 +316,15 @@ def backtest_portfolio(
             elif hold_days >= hold_days_max:
                 exit_reason = "timeout"
             if exit_reason:
-                sell_value = position * price * (1 - commission)
+                exit_price = low[i] if worst_case else price
+                sell_value = position * exit_price * (1 - commission)
                 cash += sell_value
                 trades.append({
                     "entry_idx": entry_idx,
                     "exit_idx": i,
                     "entry_price": entry_price,
-                    "exit_price": price,
-                    "return_pct": pnl_pct,
+                    "exit_price": exit_price,
+                    "return_pct": (exit_price - entry_price) / entry_price,
                     "hold_days": hold_days,
                     "exit_reason": exit_reason,
                 })
@@ -319,25 +333,27 @@ def backtest_portfolio(
                 entry_price = 0
 
         # 无持仓
-        elif position == 0 and sig_val > 0:
-            shares = int(cash * position_size * 0.95 / price)
+        elif position == 0 and sig_val > 0 and not day_limited:
+            buy_price = high[i] if worst_case else price
+            shares = int(cash * position_size * 0.95 / buy_price)
             if shares > 0:
-                cost = shares * price * (1 + commission)
+                cost = shares * buy_price * (1 + commission)
                 cash -= cost
                 position = shares
                 entry_idx = i
-                entry_price = price
+                entry_price = buy_price
 
         equity[i] = cash + position * price
 
     if position > 0:
-        cash += position * close[-1] * (1 - commission)
+        exit_price = low[-1] if worst_case else close[-1]
+        cash += position * exit_price * (1 - commission)
         trades.append({
             "entry_idx": entry_idx,
             "exit_idx": n - 1,
             "entry_price": entry_price,
-            "exit_price": close[-1],
-            "return_pct": (close[-1] - entry_price) / entry_price,
+            "exit_price": exit_price,
+            "return_pct": (exit_price - entry_price) / entry_price,
             "hold_days": n - 1 - entry_idx,
             "exit_reason": "force_close",
         })
@@ -382,7 +398,8 @@ def backtest_portfolio(
 # 组合分析主函数
 # ═══════════════════════════════════════════════════════════════
 
-def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
+def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None,
+                      worst_case: bool = False, limit_pct: float = 0.0) -> Dict:
     """
     分析多种组合方式:
       - equal_weight: 等权 Top5 策略
@@ -395,7 +412,7 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
 
     from src.strategies import backtest_all, rank_strategies
 
-    results = backtest_all(df, min_trades=1)
+    results = backtest_all(df, min_trades=1, worst_case=worst_case, limit_pct=limit_pct)
     ranked = rank_strategies(results, "sharpe_ratio")
     top5 = [sid for sid, _, _ in ranked[:5]]
     top10 = [sid for sid, _, _ in ranked[:10]]
@@ -403,7 +420,7 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
     summary = {}
     # 等权组合 Top5
     if "equal_weight" in methods:
-        r = backtest_portfolio(df, top5)
+        r = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct)
         summary["equal_weight_top5"] = result_to_dict(r)
     # 夏普加权 Top5
     if "sharpe_weight" in methods:
@@ -413,13 +430,13 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
         if weights:
             total = sum(weights.values())
             weights = {k: v / total for k, v in weights.items()}
-        r = backtest_portfolio(df, top5, weights)
+        r = backtest_portfolio(df, top5, weights, worst_case=worst_case, limit_pct=limit_pct)
         summary["sharpe_weight_top5"] = result_to_dict(r)
     # 状态驱动组合
     if "regime" in methods:
         regime = detect_market_regime(df)
         selected = select_strategies_by_regime(df, regime, top_n=5)
-        r = backtest_portfolio(df, selected)
+        r = backtest_portfolio(df, selected, worst_case=worst_case, limit_pct=limit_pct)
         summary["regime_driven"] = result_to_dict(r)
         summary["regime_driven"]["selected_strategies"] = selected
         summary["regime_info"] = {
@@ -430,7 +447,7 @@ def analyze_portfolio(df: pd.DataFrame, methods: List[str] = None) -> Dict:
         }
     # 动态波动率目标: 用Top5策略,但按当前20日波动率调整仓位
     if "dynamic" in methods:
-        r = backtest_portfolio(df, top5, position_size=0.8)
+        r = backtest_portfolio(df, top5, position_size=0.8, worst_case=worst_case, limit_pct=limit_pct)
         summary["dynamic_vol_target"] = result_to_dict(r)
 
     # 基准：买入持有

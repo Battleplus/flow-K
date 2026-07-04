@@ -106,26 +106,42 @@ def run_backtest(
     hold_days_max: int = 30,
     initial_capital: float = 100000,
     commission: float = 0.001,
+    worst_case: bool = False,
+    limit_pct: float = 0.0,
 ) -> BacktestResult:
     """
     简易事件驱动回测引擎
     - 买入: 信号 > 0
     - 卖出: 信号 < 0 或 止损/止盈/超时
     - 不做空，只做多
+
+    worst_case: 开启后，买入用当日最高价、卖出用当日最低价（最差执行）
+    limit_pct: >0 时模拟涨跌停，单日涨跌幅超过此值暂停交易
     """
     close = df["Close"].values
+    high = df["High"].values if worst_case and "High" in df.columns else close
+    low = df["Low"].values if worst_case and "Low" in df.columns else close
     n = len(close)
     equity = np.ones(n) * initial_capital
-    position = 0          # 持仓股数
+    position = 0
     cash = initial_capital
     trades = []
     entry_idx = -1
     entry_price = 0
     hold_days = 0
+    skip_count = 0
 
     for i in range(n):
         price = close[i]
         sig_val = signals.iloc[i] if i < len(signals) else 0
+
+        # 涨跌停检查: 当日涨跌幅超过阈值则暂停交易
+        day_limited = False
+        if limit_pct > 0 and i > 0:
+            day_change = abs((close[i] - close[i - 1]) / close[i - 1])
+            if day_change >= limit_pct:
+                day_limited = True
+                skip_count += 1
 
         # 有持仓: 检查出场条件
         if position > 0:
@@ -143,14 +159,16 @@ def run_backtest(
                 exit_reason = "timeout"
 
             if exit_reason:
-                sell_value = position * price * (1 - commission)
+                # 最差执行: 卖出用当日最低价
+                exit_price = low[i] if worst_case else price
+                sell_value = position * exit_price * (1 - commission)
                 cash += sell_value
                 trades.append({
                     "entry_idx": entry_idx,
                     "exit_idx": i,
                     "entry_price": entry_price,
-                    "exit_price": price,
-                    "return_pct": pnl_pct,
+                    "exit_price": exit_price,
+                    "return_pct": (exit_price - entry_price) / entry_price,
                     "hold_days": hold_days,
                     "exit_reason": exit_reason,
                 })
@@ -158,28 +176,32 @@ def run_backtest(
                 entry_idx = -1
                 entry_price = 0
 
-        # 无持仓: 检查入场条件
-        elif position == 0 and sig_val > 0:
-            position = int(cash * 0.95 / price)  # 用95%现金买入
+        # 无持仓: 检查入场条件（涨跌停日不交易）
+        elif position == 0 and sig_val > 0 and not day_limited:
+            # 最差执行: 买入用当日最高价
+            buy_price = high[i] if worst_case else price
+            position = int(cash * 0.95 / buy_price)
             if position > 0:
-                cost = position * price * (1 + commission)
+                cost = position * buy_price * (1 + commission)
                 cash -= cost
                 entry_idx = i
-                entry_price = price
+                entry_price = buy_price
 
-        # 更新权益
+        # 更新权益（按收盘价估值）
         equity[i] = cash + position * price
 
     # 强制平仓
     if position > 0:
-        final_value = position * close[-1] * (1 - commission)
+        # 最差执行: 最后一天用最低价卖出
+        exit_price = low[-1] if worst_case else close[-1]
+        final_value = position * exit_price * (1 - commission)
         cash += final_value
         trades.append({
             "entry_idx": entry_idx,
             "exit_idx": n - 1,
             "entry_price": entry_price,
-            "exit_price": close[-1],
-            "return_pct": (close[-1] - entry_price) / entry_price,
+            "exit_price": exit_price,
+            "return_pct": (exit_price - entry_price) / entry_price,
             "hold_days": n - 1 - entry_idx,
             "exit_reason": "force_close",
         })
@@ -809,6 +831,8 @@ def generate_strategy_signals(df: pd.DataFrame, strategy_id: str) -> pd.Series:
 def backtest_strategy(
     df: pd.DataFrame, strategy_id: str,
     initial_capital: float = 100000,
+    worst_case: bool = False,
+    limit_pct: float = 0.0,
 ) -> BacktestResult:
     """回测单个策略"""
     strat = STRATEGIES[strategy_id]
@@ -820,6 +844,8 @@ def backtest_strategy(
         hold_days_min=strat.hold_days_min,
         hold_days_max=strat.hold_days_max,
         initial_capital=initial_capital,
+        worst_case=worst_case,
+        limit_pct=limit_pct,
     )
     result.strategy_id = strategy_id
     result.strategy_name = strat.name
@@ -830,12 +856,15 @@ def backtest_all(
     df: pd.DataFrame,
     initial_capital: float = 100000,
     min_trades: int = 1,
+    worst_case: bool = False,
+    limit_pct: float = 0.0,
 ) -> Dict[str, BacktestResult]:
     """对所有注册策略进行回测"""
     results = {}
     for sid in STRATEGIES:
         try:
-            r = backtest_strategy(df, sid, initial_capital=initial_capital)
+            r = backtest_strategy(df, sid, initial_capital=initial_capital,
+                                  worst_case=worst_case, limit_pct=limit_pct)
             if r.total_trades >= min_trades:
                 results[sid] = r
         except Exception as e:

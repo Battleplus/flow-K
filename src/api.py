@@ -25,6 +25,11 @@ def index():
     return send_from_directory(str(ROOT / "web"), "index.html")
 
 
+@app.route("/report")
+def report():
+    return send_from_directory(str(ROOT / "outputs"), "backtest_report.html")
+
+
 @app.route("/api/chart")
 def api_chart():
     path = request.args.get("path", "")
@@ -110,13 +115,17 @@ def api_backtest(ticker):
     """
     对指定股票回测所有策略
     参数:
-      strategy: 指定策略ID (可选, 不传则回测全部)
-      period:   数据周期 (默认1y)
-      capital:  初始资金 (默认100000)
+      strategy:   指定策略ID (可选, 不传则回测全部)
+      period:     数据周期 (默认1y)
+      capital:    初始资金 (默认100000)
+      worst_case: 最差执行模式 (true/false, 默认true)
+      limit:      涨跌停限制百分比 (0=关闭, 默认0, 例如 limit=0.1 表示单日涨跌超10%禁止交易)
     """
     period = request.args.get("period", "1y")
     strategy_id = request.args.get("strategy", None)
     capital = float(request.args.get("capital", 100000))
+    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
+    limit_pct = float(request.args.get("limit", 0))
 
     try:
         from src.strategies import STRATEGIES, backtest_strategy, backtest_all, get_strategy_summary
@@ -127,7 +136,8 @@ def api_backtest(ticker):
         if strategy_id:
             if strategy_id not in STRATEGIES:
                 return jsonify({"error": f"未知策略: {strategy_id}"}), 400
-            r = backtest_strategy(df, strategy_id, initial_capital=capital)
+            r = backtest_strategy(df, strategy_id, initial_capital=capital,
+                                  worst_case=worst_case, limit_pct=limit_pct)
             result = {
                 "ticker": ticker.upper(),
                 "period": period,
@@ -142,11 +152,14 @@ def api_backtest(ticker):
                 "avg_return_per_trade": round(r.avg_return_per_trade * 100, 2),
                 "avg_hold_days": round(r.avg_hold_days, 0),
                 "profit_factor": round(r.profit_factor, 2),
+                "worst_case": worst_case,
+                "limit_pct": limit_pct,
                 # 最近20天的信号
                 "recent_signals": r.signal_series.iloc[-20:].tolist(),
             }
         else:
-            results = backtest_all(df, initial_capital=capital, min_trades=1)
+            results = backtest_all(df, initial_capital=capital, min_trades=1,
+                                   worst_case=worst_case, limit_pct=limit_pct)
             summary_df = get_strategy_summary(results)
             result = {
                 "ticker": ticker.upper(),
@@ -223,6 +236,8 @@ def api_portfolio(ticker):
       - 组合权益曲线图
     """
     period = request.args.get("period", "1y")
+    worst_case = request.args.get("worst_case", "true").lower() in ("true", "1", "yes")
+    limit_pct = float(request.args.get("limit", 0))
     try:
         from src.strategy_portfolio import analyze_portfolio, plot_portfolio_equity, backtest_portfolio
         from src.strategies import backtest_all, rank_strategies
@@ -230,12 +245,12 @@ def api_portfolio(ticker):
         df = fetch_data(ticker, period=period)
         df = add_all_factors(df)
 
-        summary = analyze_portfolio(df)
+        summary = analyze_portfolio(df, worst_case=worst_case, limit_pct=limit_pct)
 
         # 用等权 Top5 组合生成权益曲线图
-        ranked = rank_strategies(backtest_all(df), "sharpe_ratio")
+        ranked = rank_strategies(backtest_all(df, worst_case=worst_case, limit_pct=limit_pct), "sharpe_ratio")
         top5 = [sid for sid, _, _ in ranked[:5]]
-        portfolio_result = backtest_portfolio(df, top5)
+        portfolio_result = backtest_portfolio(df, top5, worst_case=worst_case, limit_pct=limit_pct)
         chart_path = plot_portfolio_equity(df, portfolio_result, ticker, "等权Top5组合")
 
         return jsonify({
